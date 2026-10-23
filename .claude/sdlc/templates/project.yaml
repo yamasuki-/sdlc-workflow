@@ -1,0 +1,23 @@
+# プロジェクト固有情報（ワークフロー本体は言語非依存。言語固有の情報はここだけに置く）
+language: ""              # 例: python / typescript / java / go
+test_framework: ""        # 例: pytest / vitest / junit5
+commands:
+  test: ""                # 全テスト実行。終了コード 0 = 全件成功（TDD ガードと不具合クローズ判定に使用）
+  test_unit: ""           # 任意: 単体テストのみ
+  test_integration: ""    # 任意: 結合テストのみ
+  test_system: ""         # 任意: システム／受入テストのみ
+  lint: ""                # 任意
+  coverage: ""            # 任意: カバレッジ計測
+coverage_threshold: 0     # カバレッジ下限（%）。0 = 判定しない
+src_dir: ""               # 例: src
+test_dir: ""              # 例: tests
+# 任意: 省略時は <test_dir>/unit, integration, system, regression
+# test_dirs:
+#   unit: tests/unit
+#   integration: tests/integration
+#   system: tests/system
+#   regression: tests/regression
+tdd:
+  hook_timeout_sec: 300   # TDD ガードがテストを実行するときのタイムアウト
+parallel:
+  max_tasks: 2            # 同時実行タスク数（Claude Pro 前提で 2）

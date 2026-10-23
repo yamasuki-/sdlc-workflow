@@ -1,0 +1,582 @@
+#!/usr/bin/env python3
+"""SDLC ワークフローの状態管理 CLI（Claude・人の両方が使う）。
+
+ゲートの承認だけはこの CLI ではなく、人が実行する scripts/approve で行う。
+使い方は `scripts/sdlc -h` / `scripts/sdlc <コマンド> -h` を参照。
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from sdlc_lib import defects, gates, state, tasks, tdd, trace  # noqa: E402
+from sdlc_lib.config import (PHASE_IDS, PHASES, ConfigError, find_root, load_project,  # noqa: E402
+                             phase_id, phase_index, phase_name, project_problems)
+
+
+def die(msg: str, code: int = 1):
+    print(f"エラー: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def ctx():
+    root = find_root()
+    proj = load_project(root)
+    return root, proj
+
+
+def need_project(proj):
+    probs = project_problems(proj)
+    if probs:
+        die("project.yaml が不完全です（/sdlc-init を実行してください）:\n  - " + "\n  - ".join(probs))
+
+
+# ------------------------------------------------------------------ status
+
+def open_defects(root):
+    out = []
+    for did in defects.all_ids(root):
+        meta, _ = defects.load(root, did)
+        if meta.get("status") != "クローズ":
+            out.append({"id": did, "status": meta.get("status"), "title": meta.get("title")})
+    return out
+
+
+def compute_status(root, proj):
+    st = state.load(root)
+    res = {"root": str(root), "state": st, "project_problems": project_problems(proj),
+           "gates": [], "tasks": None, "open_defects": open_defects(root), "next": None}
+    if res["project_problems"]:
+        res["next"] = {"action": "init", "message": "/sdlc-init で project.yaml を作成・補完してください。"}
+        return res
+    files = gates.list_files(root)
+    gs = gates.all_status(root, proj, files)
+    res["gates"] = gs
+    tf = state.current_tasks_file(root, st)
+    res["tasks_file"] = tf.relative_to(root).as_posix()
+    if tf.exists():
+        res["tasks"] = {"file": res["tasks_file"], **tasks.summary(tasks.load(tf))}
+    cur = st["current_phase"]
+    k = phase_index(cur)
+    g = gs[k]
+    skill = PHASES[k]["skill"]
+
+    def nxt(action, message, **kw):
+        res["next"] = {"action": action, "phase": cur, "skill": skill, "step": st["step"], "message": message, **kw}
+        return res
+
+    if st["mode"] == "defect":
+        did = st["defect"]
+        if st["step"] == "verify":
+            return nxt("defect_verify", f"{did}: 再現テスト Green と回帰テスト全通過を確認し `scripts/sdlc defect close {did}` を実行。", defect=did)
+    elif res["open_defects"]:
+        d = res["open_defects"][0]
+        return nxt("defect", f"未完了の不具合 {d['id']}（{d['status']}）があります。/defect {d['id']} で対応してください。", defect=d["id"])
+    if not any(Path(root, f).is_file() for f in files if f.startswith("input/") and not f.endswith(".gitkeep")):
+        return nxt("need_input", "input/ に要求ドキュメント（xlsx/docx/pptx/md）を置いてください。")
+    bad_up = [s for s in gs[:k] if not s["valid"]]
+    if bad_up:
+        u = bad_up[0]
+        return nxt("blocked_upstream",
+                   f"前工程 {u['phase']} のゲートが無効です（{u['reason']}）。成果物が承認後に変わった場合は /defect で原因工程から"
+                   f"やり直すか、人が `scripts/approve {u['phase']}` で再承認してください。", upstream=u["phase"])
+    if g["valid"]:
+        if st["mode"] == "defect":
+            return nxt("advance", f"{cur} のゲートは承認済み。`scripts/sdlc phase advance` で次のやり直し工程へ。")
+        if k == len(PHASES) - 1:
+            return nxt("done", "全工程のゲートが承認済みです。")
+        return nxt("advance", f"{cur} のゲートは承認済み。`scripts/sdlc phase advance` で {PHASE_IDS[k + 1]} へ進みます。")
+    if st["step"] == "gate":
+        if g["decision"] == "rejected" and g["recorded_hash"] == g["current_hash"]:
+            return nxt("revise", f"{cur} は差戻されました（{gate_rel(root, cur)} のコメントを参照）。/{skill} で修正してください。")
+        return nxt("await_approval", f"人による承認待ちです。人が端末で `scripts/approve {cur}` を実行してください。")
+    return nxt("run_phase", f"/{skill} を実行してください（再開位置: {state.STEP_LABELS.get(st['step'], st['step'])}）。")
+
+
+def gate_rel(root, phase):
+    return gates.gate_path(root, phase).relative_to(root).as_posix()
+
+
+def cmd_status(a):
+    root, proj = ctx()
+    res = compute_status(root, proj)
+    if a.json:
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+        return
+    st = res["state"]
+    mode = "通常" if st["mode"] == "normal" else f"不具合対応（{st['defect']}、再開先 {st['resume_phase']}）"
+    print(f"モード: {mode}")
+    print(f"現在工程: {st['current_phase']} {phase_name(st['current_phase'])} / ステップ: {state.STEP_LABELS.get(st['step'], st['step'])}")
+    for p in res["project_problems"]:
+        print(f"  ! {p}")
+    if res["gates"]:
+        print("ゲート:")
+        for s in res["gates"]:
+            mark = "✔" if s["valid"] else ("·" if not s["exists"] else "✘")
+            print(f"  {mark} {s['phase']:<24} {s['reason']}")
+    if res.get("tasks_file"):
+        print(f"タスクファイル: {res['tasks_file']}")
+    if res["tasks"]:
+        t = res["tasks"]
+        print(f"タスク（{t['file']}）: 完了 {t['done']}/{t['total']}  実行中 {t['in_progress']}  失敗 {t['failed']}  停止 {t['blocked']}")
+    for d in res["open_defects"]:
+        print(f"不具合: {d['id']} [{d['status']}] {d['title']}")
+    print(f"次のアクション: {res['next']['message']}")
+
+
+# ------------------------------------------------------------------ init / project
+
+def cmd_init(a):
+    root = find_root()
+    for d in ["input", "docs", "state/gates", "state/defects", "state/tasks"] + [f"docs/{p}" for p in PHASE_IDS]:
+        (root / d).mkdir(parents=True, exist_ok=True)
+        keep = root / d / ".gitkeep"
+        if not any((root / d).iterdir()):
+            keep.touch()
+    if not state.phase_json(root).exists():
+        state.save(root, dict(state.DEFAULT_STATE))
+    print("state/ と docs/ を初期化しました。")
+    proj = load_project(root)
+    for p in project_problems(proj):
+        print(f"  ! {p}")
+
+
+def cmd_project_check(a):
+    _, proj = ctx()
+    probs = project_problems(proj)
+    if probs:
+        die("project.yaml の問題:\n  - " + "\n  - ".join(probs))
+    print("project.yaml: OK")
+    print(json.dumps(proj, ensure_ascii=False, indent=2))
+
+
+# ------------------------------------------------------------------ phase
+
+def cmd_phase_show(a):
+    root, _ = ctx()
+    print(json.dumps(state.load(root), ensure_ascii=False, indent=2))
+
+
+def cmd_phase_step(a):
+    root, _ = ctx()
+    st = state.load(root)
+    st["step"] = a.step
+    state.save(root, st)
+    print(f"{st['current_phase']}: ステップ → {state.STEP_LABELS[a.step]}")
+
+
+def archive_tasks(root, st):
+    tf = state.current_tasks_file(root, st)
+    if st["mode"] == "normal" and tf.exists():
+        dst = root / "state" / "tasks" / f"{st['current_phase']}.yaml"
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        tf.replace(dst)
+        return dst
+    return None
+
+
+def cmd_phase_advance(a):
+    root, proj = ctx()
+    need_project(proj)
+    st = state.load(root)
+    cur = st["current_phase"]
+    g = gates.gate_status(root, proj, cur)
+    if not g["valid"]:
+        die(f"{cur} のゲートが有効ではありません（{g['reason']}）。人が `scripts/approve {cur}` を実行する必要があります。")
+    if st["mode"] == "defect":
+        meta, _ = defects.load(root, st["defect"])
+        rw = [phase_id(p) for p in meta["rework_phases"]]
+        rest = [p for p in rw if phase_index(p) > phase_index(cur)]
+        if rest:
+            st["current_phase"], st["step"] = rest[0], "plan"
+            print(f"やり直し工程 → {rest[0]}")
+        else:
+            st["step"] = "verify"
+            print("やり直し工程はすべて承認済みです。検証（defect close）へ。")
+        state.save(root, st)
+        return
+    k = phase_index(cur)
+    if k == len(PHASES) - 1:
+        die("最終工程です。")
+    dst = archive_tasks(root, st)
+    st["current_phase"], st["step"] = PHASE_IDS[k + 1], "plan"
+    state.save(root, st)
+    if dst:
+        print(f"タスクを {dst.relative_to(root)} に保管しました。")
+    print(f"工程 → {st['current_phase']} {phase_name(st['current_phase'])}")
+
+
+# ------------------------------------------------------------------ gate
+
+def cmd_gate_status(a):
+    root, proj = ctx()
+    need_project(proj)
+    phases = [a.phase] if a.phase else PHASE_IDS
+    files = gates.list_files(root)
+    for p in phases:
+        s = gates.gate_status(root, proj, p, files)
+        print(f"{'✔' if s['valid'] else '✘'} {s['phase']}: {s['reason']}")
+
+
+def cmd_gate_artifacts(a):
+    root, proj = ctx()
+    need_project(proj)
+    h, items = gates.artifacts(root, proj, a.phase)
+    for it in items:
+        print(f"{it['sha256'][:12]}  {it['path']}")
+    print(f"集約ハッシュ: {h}（{len(items)} ファイル）")
+
+
+def cmd_gate_check(a):
+    """工程 phase に着手してよいか（前工程ゲートがすべて有効か）。"""
+    root, proj = ctx()
+    need_project(proj)
+    bad = gates.prerequisites(root, proj, a.phase)
+    if bad:
+        die("前工程のゲートが無効です:\n" + "\n".join(f"  ✘ {s['phase']}: {s['reason']}" for s in bad), 2)
+    print(f"{phase_id(a.phase)} に着手できます。")
+
+
+# ------------------------------------------------------------------ tasks
+
+def tasks_path(root, a):
+    if getattr(a, "file", None):
+        return root / a.file
+    return state.current_tasks_file(root, main=getattr(a, "main", False))
+
+
+def cmd_tasks_validate(a):
+    root, proj = ctx()
+    tf = tasks_path(root, a)
+    data = tasks.load(tf)
+    st = state.load(root)
+    phase = data.get("phase") or st["current_phase"]
+    errs = tasks.validate(data, proj, phase_id(phase))
+    if errs:
+        die(f"{tf.relative_to(root)} の問題:\n  - " + "\n  - ".join(errs))
+    print(f"{tf.relative_to(root)}: OK（{len(data['tasks'])} タスク）")
+
+
+def cmd_tasks_next(a):
+    root, proj = ctx()
+    tf = tasks_path(root, a)
+    data = tasks.load(tf)
+    mx = a.max or int((proj or {}).get("parallel", {}).get("max_tasks", 2))
+    picked = tasks.ready(data, mx)
+    if a.json:
+        print(json.dumps(picked, ensure_ascii=False, indent=2))
+        return
+    if not picked:
+        s = tasks.summary(data)
+        if s["done"] == s["total"]:
+            print("全タスク完了。統合ステップへ進んでください。")
+        else:
+            print(f"今すぐ開始できるタスクはありません（実行中 {s['in_progress']} / 失敗 {s['failed']} / 停止 {s['blocked']}）。")
+        return
+    for t in picked:
+        wt = "（worktree）" if t.get("worktree") else ""
+        print(f"{t['id']} [{t['agent']}]{wt} {t.get('title', '')}  files={t['files']}")
+
+
+def cmd_tasks_show(a):
+    root, _ = ctx()
+    tf = tasks_path(root, a)
+    print(tf.read_text(encoding="utf-8"))
+
+
+def cmd_tasks_recover(a):
+    root, _ = ctx()
+    tf = tasks_path(root, a)
+    data = tasks.load(tf)
+    ids = tasks.recover(data)
+    tasks.save(tf, data)
+    print("中断タスクを pending に戻しました: " + (", ".join(ids) if ids else "なし"))
+
+
+def cmd_task_set(a):
+    root, _ = ctx()
+    tf = tasks_path(root, a)
+    data = tasks.load(tf)
+    status = {"start": "in_progress", "done": "done", "fail": "failed"}[a.action]
+    try:
+        t = tasks.set_status(data, a.id, status, a.result)
+    except tasks.TaskError as e:
+        die(str(e))
+    tasks.save(tf, data)
+    if status == "in_progress" and not t.get("worktree"):
+        tdd.reset(root, a.id)
+    print(f"{a.id}: {status}")
+
+
+# ------------------------------------------------------------------ trace
+
+def cmd_trace_check(a):
+    root, proj = ctx()
+    upto = phase_index(a.upto) if a.upto is not None else phase_index(state.load(root)["current_phase"])
+    g = trace.build(root, proj)
+    issues = trace.check(g, upto)
+    print(f"定義 {len(g.defs)} 件、検査範囲: 工程 {PHASE_IDS[upto]} まで")
+    for i in issues:
+        print(f"  {i}")
+    if issues:
+        die(f"トレーサビリティの問題が {len(issues)} 件あります。", 3)
+    print("トレーサビリティ: OK")
+
+
+def cmd_trace_walk(a):
+    root, proj = ctx()
+    g = trace.build(root, proj)
+    unknown = [i for i in a.ids if i not in g.defs]
+    if unknown:
+        die("未定義の ID: " + ", ".join(unknown))
+    if a.cmd2 == "impact":
+        r = trace.impact(g, a.ids)
+        print(json.dumps(r, ensure_ascii=False, indent=2))
+    else:
+        for n in trace.upstream(g, a.ids):
+            print(f"{n}  {trace.node_file(g, n)}")
+
+
+def cmd_trace_matrix(a):
+    root, proj = ctx()
+    out = trace.matrix(trace.build(root, proj))
+    if a.out:
+        Path(root, a.out).write_text(out, encoding="utf-8")
+        print(f"{a.out} に出力しました。")
+    else:
+        print(out)
+
+
+# ------------------------------------------------------------------ tdd
+
+def cmd_tdd(a):
+    root = find_root()
+    from sdlc_lib.config import worktree_root
+    wroot = worktree_root(Path.cwd()) or root
+    proj = load_project(wroot) or load_project(root)
+    if a.cmd2 == "reset":
+        tdd.reset(wroot)
+        print(f"TDD 状態をリセットしました（{wroot}）。")
+    else:
+        need_project(proj)
+        ok, msg = tdd.check_src_edit(wroot, proj)
+        print(("許可: " if ok else "拒否: ") + msg)
+        sys.exit(0 if ok else 2)
+
+
+# ------------------------------------------------------------------ defect
+
+def cmd_defect_new(a):
+    root, proj = ctx()
+    did = defects.create(root, a.title, a.detected_in, a.severity, a.by, a.test)
+    print(f"{did} を起票しました: {defects.path(root, did).relative_to(root)}")
+
+
+def cmd_defect_list(a):
+    root, _ = ctx()
+    for did in defects.all_ids(root):
+        m, _ = defects.load(root, did)
+        print(f"{did} [{m.get('status')}] {m.get('severity')} {m.get('title')}（検出: {m.get('detected_in')}）")
+
+
+def cmd_defect_impact(a):
+    root, proj = ctx()
+    need_project(proj)
+    meta, body = defects.load(root, a.id)
+    if not meta.get("cause_ids"):
+        die("cause_ids が未記入です。")
+    g = trace.build(root, proj)
+    unknown = [i for i in meta["cause_ids"] if i not in g.defs]
+    if unknown:
+        die("cause_ids に未定義の ID: " + ", ".join(unknown))
+    r = trace.impact(g, meta["cause_ids"])
+    rt = meta.get("reproduction_test")
+    files = sorted(set(r["files"]) - ({rt} if rt else set()))
+    sugg = defects.suggest_rework_phases(meta, files, proj) if meta.get("injected_phase") else []
+    print(json.dumps({"impact_ids": r["ids"], "impact_files": files, "suggested_rework_phases": sugg},
+                     ensure_ascii=False, indent=2))
+    if a.write:
+        meta["impact_ids"], meta["impact_files"] = r["ids"], files
+        if sugg and not meta.get("rework_phases"):
+            meta["rework_phases"] = sugg
+        defects.save(root, a.id, meta, defects.log(body, "影響範囲を算出"))
+        print("不具合票に書き込みました。")
+
+
+def cmd_defect_analyzed(a):
+    root, _ = ctx()
+    meta, body = defects.load(root, a.id)
+    probs = defects.problems(meta)
+    if probs:
+        die("不具合票が未完成です:\n  - " + "\n  - ".join(probs))
+    meta["status"] = "原因判定済"
+    defects.save(root, a.id, meta, defects.log(body, "原因判定済（人間ゲート待ち）"))
+    print(f"{a.id}: 原因判定済。人が `scripts/approve defect {a.id}` でやり直し範囲を承認してください。")
+
+
+def cmd_defect_start(a):
+    root, proj = ctx()
+    need_project(proj)
+    st = state.load(root)
+    if st["mode"] == "defect":
+        die(f"既に不具合対応モードです（{st['defect']}）。")
+    meta, body = defects.load(root, a.id)
+    if not gates.defect_gate_valid(root, a.id):
+        die(f"{a.id} のやり直し範囲が承認されていません。人が `scripts/approve defect {a.id}` を実行してください。")
+    rw = sorted((phase_id(p) for p in meta["rework_phases"]), key=phase_index)
+    st.update({"mode": "defect", "defect": a.id, "resume_phase": st["current_phase"],
+               "resume_step": st["step"], "current_phase": rw[0], "step": "plan"})
+    state.save(root, st)
+    mt = state.main_tasks_file(root)
+    blocked = []
+    if mt.exists():
+        data = tasks.load(mt)
+        blocked = tasks.block(data, a.id, set(meta.get("impact_ids", [])), meta.get("impact_files", []))
+        tasks.save(mt, data)
+    meta["status"] = "修正中"
+    defects.save(root, a.id, meta, defects.log(body, f"やり直し開始（{', '.join(rw)}）"))
+    print(f"不具合対応モード開始: {a.id} / やり直し工程 {rw} / 再開先 {st['resume_phase']}")
+    if blocked:
+        print("影響範囲内のため停止したタスク: " + ", ".join(blocked))
+
+
+def cmd_defect_close(a):
+    root, proj = ctx()
+    need_project(proj)
+    st = state.load(root)
+    if st["mode"] != "defect" or st["defect"] != a.id:
+        die(f"{a.id} は対応中ではありません。")
+    if st["step"] != "verify":
+        die("やり直し工程のゲートがすべて承認されていません（`scripts/sdlc phase advance` で verify まで進めてください）。")
+    bad = gates.prerequisites(root, proj, st["resume_phase"])
+    if bad:
+        die("ゲートが無効な工程があります: " + ", ".join(s["phase"] for s in bad))
+    meta, body = defects.load(root, a.id)
+    rt = meta.get("reproduction_test")
+    if not rt or not Path(root, rt).exists():
+        die(f"再現テストがありません: {rt}")
+    r = subprocess.run(proj["commands"]["test"], shell=True, cwd=str(root), capture_output=True, text=True)
+    if r.returncode != 0:
+        die("テストが全件成功していません（再現テスト Green ＋ 回帰テスト全通過が必要）:\n" + (r.stdout + r.stderr)[-3000:])
+    body = defects.log(body, "検証済（再現テスト Green・全テスト成功）")
+    meta["status"] = "クローズ"
+    meta["closed_at"] = state.now()
+    defects.save(root, a.id, meta, defects.log(body, "クローズ"))
+    mt = state.main_tasks_file(root)
+    if mt.exists():
+        data = tasks.load(mt)
+        ids = tasks.unblock(data, a.id)
+        tasks.save(mt, data)
+        if ids:
+            print("停止を解除したタスク: " + ", ".join(ids))
+    st.update({"mode": "normal", "defect": None, "current_phase": st["resume_phase"],
+               "step": st.pop("resume_step", None) or "plan", "resume_phase": None})
+    state.save(root, st)
+    print(f"{a.id} をクローズしました。工程 {st['current_phase']} に復帰します。")
+
+
+# ------------------------------------------------------------------ main
+
+def build_parser():
+    p = argparse.ArgumentParser(prog="scripts/sdlc", description="SDLC ワークフロー状態管理")
+    sp = p.add_subparsers(dest="cmd", required=True)
+
+    s = sp.add_parser("status", help="現在の状態と次のアクション")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(func=cmd_status)
+    sp.add_parser("init", help="state/・docs/ を初期化").set_defaults(func=cmd_init)
+    pr = sp.add_parser("project", help="project.yaml").add_subparsers(dest="cmd2", required=True)
+    pr.add_parser("check").set_defaults(func=cmd_project_check)
+
+    ph = sp.add_parser("phase", help="工程の操作").add_subparsers(dest="cmd2", required=True)
+    ph.add_parser("show").set_defaults(func=cmd_phase_show)
+    x = ph.add_parser("step")
+    x.add_argument("step", choices=state.STEPS)
+    x.set_defaults(func=cmd_phase_step)
+    ph.add_parser("advance", help="ゲート承認済みなら次工程へ").set_defaults(func=cmd_phase_advance)
+
+    gt = sp.add_parser("gate", help="ゲートの確認（承認は scripts/approve）").add_subparsers(dest="cmd2", required=True)
+    x = gt.add_parser("status")
+    x.add_argument("phase", nargs="?")
+    x.set_defaults(func=cmd_gate_status)
+    x = gt.add_parser("artifacts", help="工程の成果物とハッシュ")
+    x.add_argument("phase")
+    x.set_defaults(func=cmd_gate_artifacts)
+    x = gt.add_parser("check", help="工程に着手可能か")
+    x.add_argument("phase")
+    x.set_defaults(func=cmd_gate_check)
+
+    def taskfile_opts(x):
+        x.add_argument("--main", action="store_true", help="不具合対応中でも本線の state/tasks.yaml を対象にする")
+        x.add_argument("--file", help="タスクファイルを明示")
+
+    tk = sp.add_parser("tasks", help="タスク DAG").add_subparsers(dest="cmd2", required=True)
+    for name, fn in [("validate", cmd_tasks_validate), ("show", cmd_tasks_show), ("recover", cmd_tasks_recover)]:
+        x = tk.add_parser(name)
+        taskfile_opts(x)
+        x.set_defaults(func=fn)
+    x = tk.add_parser("next", help="並行実行できるタスク")
+    x.add_argument("--max", type=int)
+    x.add_argument("--json", action="store_true")
+    taskfile_opts(x)
+    x.set_defaults(func=cmd_tasks_next)
+
+    t1 = sp.add_parser("task", help="タスクの状態更新").add_subparsers(dest="action", required=True)
+    for name in ("start", "done", "fail"):
+        x = t1.add_parser(name)
+        x.add_argument("id")
+        x.add_argument("--result", help="成果物の要約・自己検証結果")
+        taskfile_opts(x)
+        x.set_defaults(func=cmd_task_set)
+
+    tr = sp.add_parser("trace", help="トレーサビリティ").add_subparsers(dest="cmd2", required=True)
+    x = tr.add_parser("check")
+    x.add_argument("--upto", help="この工程までのルールで検査（既定: 現在工程）")
+    x.set_defaults(func=cmd_trace_check)
+    for name in ("impact", "up"):
+        x = tr.add_parser(name)
+        x.add_argument("ids", nargs="+")
+        x.set_defaults(func=cmd_trace_walk)
+    x = tr.add_parser("matrix")
+    x.add_argument("--out")
+    x.set_defaults(func=cmd_trace_matrix)
+
+    td = sp.add_parser("tdd", help="TDD ガード").add_subparsers(dest="cmd2", required=True)
+    td.add_parser("reset").set_defaults(func=cmd_tdd)
+    td.add_parser("check").set_defaults(func=cmd_tdd)
+
+    df = sp.add_parser("defect", help="不具合対応").add_subparsers(dest="cmd2", required=True)
+    x = df.add_parser("new")
+    x.add_argument("--title", required=True)
+    x.add_argument("--detected-in", required=True)
+    x.add_argument("--severity", default="中", choices=defects.SEVERITIES)
+    x.add_argument("--by", default="human", choices=["human", "auto"])
+    x.add_argument("--test", help="再現テストのパス")
+    x.set_defaults(func=cmd_defect_new)
+    df.add_parser("list").set_defaults(func=cmd_defect_list)
+    x = df.add_parser("impact")
+    x.add_argument("id")
+    x.add_argument("--write", action="store_true")
+    x.set_defaults(func=cmd_defect_impact)
+    for name, fn in [("analyzed", cmd_defect_analyzed), ("start", cmd_defect_start), ("close", cmd_defect_close)]:
+        x = df.add_parser(name)
+        x.add_argument("id")
+        x.set_defaults(func=fn)
+    return p
+
+
+def main(argv=None):
+    a = build_parser().parse_args(argv)
+    try:
+        a.func(a)
+    except (ConfigError, tasks.TaskError, FileNotFoundError) as e:
+        die(str(e))
+
+
+if __name__ == "__main__":
+    main()

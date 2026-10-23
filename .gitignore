@@ -1,0 +1,6 @@
+# ワークフローの作業ファイル（TDD ガードの状態など。worktree ごとに独立）
+.sdlc/
+__pycache__/
+*.pyc
+.DS_Store
+# プロジェクト固有のビルド成果物・キャッシュは /sdlc-init で追記する
