@@ -768,7 +768,7 @@ class TestPlacement(unittest.TestCase):
         edited = self.proj / ".claude/sdlc/checklists/05-implementation.md"
         edited.write_text("# 編集\n", encoding="utf-8")
         untouched = self.proj / ".claude/sdlc/phase-flow.md"
-        untouched.write_text(untouched.read_text(encoding="utf-8") + "x")            # 変更扱い
+        untouched.write_text(untouched.read_text(encoding="utf-8") + "x", encoding="utf-8")            # 変更扱い
         untouched2 = self.proj / ".claude/sdlc/RULES.md"
         original = untouched2.read_text(encoding="utf-8")
         r = install("--project", str(self.proj), home=self.home)
