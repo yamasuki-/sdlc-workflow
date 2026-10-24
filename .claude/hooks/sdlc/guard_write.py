@@ -33,7 +33,9 @@ def target_path(data: dict) -> Path | None:
     p = Path(os.path.expanduser(str(p)))
     if not p.is_absolute():
         p = Path(data.get("cwd") or os.getcwd()) / p
-    return Path(os.path.normpath(p))
+    # シンボリックリンク（macOS の /var → /private/var 等）や Windows の短い名前（RUNNER~1 等）を実体のパスにそろえる。
+    # そろえないと git のルートと比べられず、判定の対象外として素通りしてしまう
+    return Path(os.path.realpath(p))
 
 
 def defect_allows(mroot, proj, st, upstream_bad: list[dict], rel: str, phase: str) -> bool:

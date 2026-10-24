@@ -29,7 +29,9 @@ from pathlib import Path
 SRC = Path(__file__).resolve().parent / ".claude"
 sys.path.insert(0, str(SRC / "sdlc" / "lib"))
 
-from sdlc_lib.config import BODY_DIRS, BODY_FILES  # noqa: E402
+from sdlc_lib.config import BODY_DIRS, BODY_FILES, utf8_stdio  # noqa: E402
+
+utf8_stdio()
 
 HOOKS = [  # (イベント, matcher, スクリプト, タイムアウト秒, 失敗時に拒否するか)
     ("PreToolUse", "Write|Edit|MultiEdit|NotebookEdit", "guard_write.py", 600, True),

@@ -23,6 +23,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))  # <.cla
 from sdlc_lib import checks, defects, fm, gates, records, state  # noqa: E402
 from sdlc_lib.config import (ConfigError, find_root, load_project, phase_id, phase_index,  # noqa: E402
                              phase_name, project_problems)
+from sdlc_lib.config import utf8_stdio  # noqa: E402
+
+utf8_stdio()
 
 CHOICES = {"1": "approved", "2": "conditional", "3": "rejected"}
 

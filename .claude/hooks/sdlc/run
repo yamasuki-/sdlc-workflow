@@ -13,7 +13,7 @@ project="${CLAUDE_PROJECT_DIR:-$PWD}"
 project="${project//\\//}"
 if [ -d "$project/.claude/hooks/sdlc" ] \
    || grep -Eq "^workflow[[:space:]]*:[[:space:]]*['\"]?sdlc" "$project/project.yaml" 2>/dev/null; then
-  echo "[SDLC ガード] Python 3.9 以上が見つからないため、安全のため拒否しました（環境変数 SDLC_PYTHON で指定できます）。" >&2
+  echo "[SDLC ガード] Python 3.10 以上が見つからないため、安全のため拒否しました（環境変数 SDLC_PYTHON で指定できます）。" >&2
   exit 2
 fi
 exit 0

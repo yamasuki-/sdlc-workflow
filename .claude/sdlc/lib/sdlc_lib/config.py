@@ -79,6 +79,16 @@ class ConfigError(Exception):
     pass
 
 
+def utf8_stdio() -> None:
+    """標準出力・標準エラーを UTF-8 にする（Windows でパイプやファイルに出すとき、既定のコードページでは日本語で落ちる）。"""
+    import sys
+    for s in (sys.stdout, sys.stderr):
+        try:
+            s.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def require_yaml():
     if yaml is None:
         raise ConfigError("PyYAML が見つかりません。`pip install -r requirements.txt` を実行してください。")
@@ -122,7 +132,7 @@ def _git(args, cwd) -> str | None:
 
 
 def _existing_dir(path: Path) -> Path:
-    p = Path(path).resolve()
+    p = Path(os.path.realpath(path))
     while not p.exists() and p != p.parent:
         p = p.parent
     return p if p.is_dir() else p.parent
@@ -133,7 +143,7 @@ def worktree_root(path) -> Path | None:
     if os.environ.get("SDLC_ROOT"):
         return Path(os.environ["SDLC_ROOT"]).resolve()
     top = _git(["rev-parse", "--show-toplevel"], _existing_dir(Path(path)))
-    return Path(top).resolve() if top else None
+    return Path(os.path.realpath(top)) if top else None
 
 
 def main_root(path) -> Path | None:

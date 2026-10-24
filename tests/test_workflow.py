@@ -717,7 +717,7 @@ class TestPlacement(unittest.TestCase):
         self.assertEqual(run_hook(self.proj / ".claude/hooks/sdlc/guard_write.py", self.proj, target, self.env).returncode, 2)
         # 本体のファイルはファイル単位でプロジェクトが優先
         r = self.sdlc("path", "templates/review.md")
-        self.assertEqual(Path(r.stdout.strip()), self.proj / ".claude/sdlc/templates/review.md")
+        self.assertEqual(Path(r.stdout.strip()).resolve(), (self.proj / ".claude/sdlc/templates/review.md").resolve())
         self.assertIn("配置: project", self.sdlc("where").stdout)
 
     def test_partial_file_override(self):
@@ -726,9 +726,10 @@ class TestPlacement(unittest.TestCase):
         override = self.proj / ".claude/sdlc/checklists/05-implementation.md"
         override.parent.mkdir(parents=True)
         override.write_text("# プロジェクト版\n")
-        self.assertEqual(Path(self.sdlc("path", "checklists/05-implementation.md").stdout.strip()), override)
-        self.assertEqual(Path(self.sdlc("path", "checklists/04-detailed-design.md").stdout.strip()),
-                         self.user / "sdlc/checklists/04-detailed-design.md")
+        self.assertEqual(Path(self.sdlc("path", "checklists/05-implementation.md").stdout.strip()).resolve(),
+                         override.resolve())
+        self.assertEqual(Path(self.sdlc("path", "checklists/04-detailed-design.md").stdout.strip()).resolve(),
+                         (self.user / "sdlc/checklists/04-detailed-design.md").resolve())
         self.assertIn("checklists/05-implementation.md", self.sdlc("where").stdout)
 
     def test_project_only_install(self):
@@ -791,6 +792,18 @@ class TestPlacement(unittest.TestCase):
 
 class TestWindowsSupport(Base):
     """Windows（Git Bash / PowerShell / コマンドプロンプト）で問題になる箇所。"""
+
+    def test_symlinked_path_is_still_guarded(self):
+        link = Path(tempfile.mkdtemp(prefix="sdlc-link-")) / "proj"
+        try:
+            link.symlink_to(self.r.dir, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("シンボリックリンクを作れない環境")
+        try:
+            r = self.r.hook("guard_write.py", {"file_path": str(link / "docs/01-requirements/a.md"), "content": "x"})
+            self.assertEqual(r.returncode, 2, r.stderr)
+        finally:
+            shutil.rmtree(link.parent, ignore_errors=True)
 
     def test_crlf_does_not_change_gate_hash(self):
         self.r.write("docs/00-intake/a.md", "x")

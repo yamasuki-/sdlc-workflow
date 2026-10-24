@@ -17,6 +17,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))  # <.cla
 
 from sdlc_lib import checks, defects, gates, project_setup, records, state, tasks, tdd, trace  # noqa: E402
 from sdlc_lib.shell import find_bash, run_shell  # noqa: E402
+from sdlc_lib.config import utf8_stdio  # noqa: E402
+
+utf8_stdio()
 from sdlc_lib.config import (PHASE_IDS, PHASES, ConfigError, body_dirs, find_root, install_mode,  # noqa: E402
                              load_project, phase_id, phase_index, phase_name, project_problems,
                              resolve_body_file)

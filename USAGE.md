@@ -16,12 +16,12 @@ Linux・macOS・Windows（Git for Windows の Git Bash を使う）で動きま�
 
 ## 1. 前提
 
-- Python 3.9 以上、git、bash（Windows では Git for Windows）
+- Python 3.10 以上、git、bash（Windows では Git for Windows）
 - 本体の依存パッケージ:
   ```bash
   python3 -m pip install -r requirements.txt   # PyYAML, openpyxl, python-docx, python-pptx
   ```
-  hooks と `scripts/sdlc` は、`python3` → `python` → `py -3` の順に、3.9 以上で PyYAML を読み込める Python を探して使います。
+  hooks と `scripts/sdlc` は、`python3` → `python` → `py -3` の順に、3.10 以上で PyYAML を読み込める Python を探して使います。
   特定の Python を使わせたいときは環境変数 `SDLC_PYTHON` に指定します（例: `SDLC_PYTHON="py -3.12"`）。
   どの Python が使われるかは `scripts/sdlc where` で確認できます。
 - PowerPoint の図をスライド画像として読み取りたい場合は LibreOffice（`soffice`）と `pdftoppm`（任意）
@@ -244,7 +244,7 @@ Windows / macOS / Linux での自己テストは GitHub Actions（`.github/workf
 | `/sdlc` などのスキルが出てこない | A: `~/.claude/skills/` に、B: `.claude/skills/` に置かれているか。Claude Code を再起動する |
 | hooks が効いていない | `/hooks` で SDLC の hooks（`hooks/sdlc/guard_*.py`）が登録されているか。A では `project.yaml` に `workflow: sdlc` があるか |
 | すべての書き込みが「ガードの内部エラー」で拒否される | hooks が使う Python（`scripts/sdlc where` で表示）に `requirements.txt` の依存が入っているか |
-| 「Python 3.9 以上が見つからない」で拒否される | Python 3.9 以上が PATH にあるか。`SDLC_PYTHON` を設定した場合はその値が正しいか（設定するとそれだけを使う） |
+| 「Python 3.10 以上が見つからない」で拒否される | Python 3.10 以上が PATH にあるか。`SDLC_PYTHON` を設定した場合はその値が正しいか（設定するとそれだけを使う） |
 | hooks が実行できず、すべての操作が拒否される | hooks は `onFailure: block` で登録されている（hooks が動かないときに素通りさせないため）。bash（Windows では Git Bash）と Python があるか確認する |
 | `SDLC ワークフロー本体が見つかりません` | A なら `~/.claude/sdlc/bin/sdlc`、B なら `.claude/sdlc/bin/sdlc` があるか（`install.py` を実行したか） |
 | 全体ルール（RULES.md）が読み込まれていない | `CLAUDE.md` の import 行（`@~/.claude/sdlc/RULES.md` か `@.claude/sdlc/RULES.md`）と、外部 import の許可。`scripts/sdlc init` を再実行すると配置に合わせて直る |
@@ -259,7 +259,7 @@ Windows / macOS / Linux での自己テストは GitHub Actions（`.github/workf
 | 必要なもの | 確認・補足 |
 |---|---|
 | Git for Windows（Git Bash） | Claude Code の Bash ツールと、このワークフローの hooks は Git Bash で動きます。Claude Code が Git Bash を見つけられない場合は `CLAUDE_CODE_GIT_BASH_PATH` を設定します（Claude Code の設定）。**WSL の bash では動きません** |
-| Python 3.9 以上 | python.org のインストーラ（`py` ランチャ付き）を推奨。Microsoft Store の `python3` エイリアスだけでは動きません（自動で除外します） |
+| Python 3.10 以上 | python.org のインストーラ（`py` ランチャ付き）を推奨。Microsoft Store の `python3` エイリアスだけでは動きません（自動で除外します） |
 | 依存パッケージ | PowerShell で `py -3 -m pip install -r requirements.txt`（hooks が使う Python に入れる。`scripts/sdlc where` で確認） |
 
 ### インストール（PowerShell / コマンドプロンプト）

@@ -7,7 +7,7 @@ Claude Code 上で動く、V 字モデルのソフトウェア開発ワークフ
 本体は `~/.claude/`（全プロジェクト共通）に置いて使うのが基本で、プロジェクトの `.claude/` に置けば
 そのプロジェクト単体でも使え、`~/.claude/` 版を上書きできます。**インストールと使い方は [USAGE.md](USAGE.md)**。
 
-対応環境: Linux / macOS / Windows（Git for Windows の Git Bash と Python 3.9 以上。PowerShell・コマンドプロンプトからも
+対応環境: Linux / macOS / Windows（Git for Windows の Git Bash と Python 3.10 以上。PowerShell・コマンドプロンプトからも
 ランチャ `scripts\sdlc.cmd`・`scripts\approve.cmd` で操作できます。詳細は USAGE.md「9. Windows で使う」）。
 
 仕様の原典: [`spec/sdlc-workflow-proposal.md`](spec/sdlc-workflow-proposal.md) /
@@ -39,7 +39,7 @@ Claude Code 上で動く、V 字モデルのソフトウェア開発ワークフ
 ## 使い方（概要）
 
 ```bash
-pip install -r requirements.txt     # 本体の依存（Python 3.9+）
+pip install -r requirements.txt     # 本体の依存（Python 3.10+）
 python3 install.py --user           # ~/.claude/ に配置（プロジェクト単体なら --project <dir>。Windows は py -3 install.py）
 cd <プロジェクト> && claude
 > /sdlc-init                        # ランチャ scripts/sdlc・CLAUDE.md の import・project.yaml を準備

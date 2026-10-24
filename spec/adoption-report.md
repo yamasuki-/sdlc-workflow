@@ -118,6 +118,6 @@ PowerShell・コマンドプロンプトから bash（Git for Windows）を起�
 | 入出力の文字コード（cp932）で日本語・記号が壊れ、hook が異常終了しうる | hooks・CLI を UTF-8 で入出力（`PYTHONUTF8=1`、標準入出力の再設定） |
 | `core.autocrlf` で bash スクリプトが CRLF になり動かない／ゲートのハッシュが OS で変わる | `.gitattributes` で LF に固定。成果物ハッシュはテキストの CRLF を LF にそろえて計算 |
 | mintty（Git Bash の画面）では TTY と判定されず承認できない／新しいコンソールを開けば Claude でも TTY を得られる | Windows では `scripts\approve.cmd` を案内。`CLAUDECODE` が設定されたプロセスからの承認を拒否。`approve` の間接的な呼び出し（cmd /c・Start-Process・script -c 等）も検出 |
-| Windows で動作確認できない | GitHub Actions で Linux / Windows / macOS × Python 3.9 / 3.12 の自己テストを実行 |
+| Windows で動作確認できない | GitHub Actions で Linux / Windows / macOS × Python 3.10 / 3.13 の自己テストを実行 |
 
 あわせて、Bash ガードが `install.py` というファイル名を `install` コマンド（書き込み）と誤認していたのを直した。
