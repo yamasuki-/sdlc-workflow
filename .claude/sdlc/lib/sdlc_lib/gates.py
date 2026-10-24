@@ -40,11 +40,14 @@ def list_files(root) -> list[str]:
 
 
 def sha256_file(path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1 << 16), b""):
-            h.update(chunk)
-    return h.hexdigest()
+    """成果物のハッシュ。テキスト（NUL を含まない）ファイルは CRLF を LF にそろえてから計算する。
+
+    Windows の git（core.autocrlf）で改行が変わっても、OS をまたいでゲートが無効にならないようにするため。
+    """
+    data = Path(path).read_bytes()
+    if b"\0" not in data[:8192]:
+        data = data.replace(b"\r\n", b"\n")
+    return hashlib.sha256(data).hexdigest()
 
 
 def phase_files(root, proj, phase, files=None) -> list[str]:

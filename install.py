@@ -4,6 +4,7 @@
   python3 install.py --user               # ~/.claude/ に置く（全プロジェクト共通。既定）
   python3 install.py --project <dir>      # <dir>/.claude/ に置く（そのプロジェクト単体で使う／~/.claude 版を上書き）
   python3 install.py --user --uninstall   # 取り除く（--project も同様）
+  Windows では PowerShell / コマンドプロンプトで py -3 install.py ...（または python install.py ...）
   オプション: --dry-run（何をするか表示するだけ）
 
 置くもの（.claude/ からの相対パス）:
@@ -30,20 +31,26 @@ sys.path.insert(0, str(SRC / "sdlc" / "lib"))
 
 from sdlc_lib.config import BODY_DIRS, BODY_FILES  # noqa: E402
 
-HOOKS = [  # (イベント, matcher, スクリプト, タイムアウト秒)
-    ("PreToolUse", "Write|Edit|MultiEdit|NotebookEdit", "guard_write.py", 600),
-    ("PreToolUse", "Bash", "guard_bash.py", 60),
-    ("PreToolUse", "Skill", "guard_skill.py", 60),
-    ("SessionStart", None, "session_start.py", 60),
+HOOKS = [  # (イベント, matcher, スクリプト, タイムアウト秒, 失敗時に拒否するか)
+    ("PreToolUse", "Write|Edit|MultiEdit|NotebookEdit", "guard_write.py", 600, True),
+    ("PreToolUse", "Bash|PowerShell", "guard_bash.py", 60, True),
+    ("PreToolUse", "Skill", "guard_skill.py", 60, True),
+    ("SessionStart", None, "session_start.py", 60, False),
 ]
+# プロジェクト配置では Windows の PowerShell ツールを止め、Bash ツール（Git Bash）に寄せる
+PROJECT_ENV = {"CLAUDE_CODE_USE_POWERSHELL_TOOL": "0"}
 DENY = ["Bash(scripts/approve:*)", "Bash(./scripts/approve:*)", "Bash(python3 scripts/approve:*)"]
 MARK = "/hooks/sdlc/"
 MANIFEST = "sdlc/.install-manifest.json"
 
 
 def hook_command(scope: str, script: str) -> str:
-    base = "$HOME/.claude" if scope == "user" else "$CLAUDE_PROJECT_DIR/.claude"
-    return f'python3 "{base}/hooks/sdlc/{script}"'
+    """bash（Windows では Git Bash）で入口 run を呼ぶ。run が Python を探して hook を実行する。"""
+    if scope == "user":
+        base = (Path.home() / ".claude").as_posix()   # Windows では C:/Users/<名前>/.claude
+    else:
+        base = "${CLAUDE_PROJECT_DIR}/.claude"
+    return f'bash "{base}/hooks/sdlc/run" {script}'
 
 
 def is_sdlc_hook(entry: dict) -> bool:
@@ -53,11 +60,24 @@ def is_sdlc_hook(entry: dict) -> bool:
 def merged_settings(settings: dict, scope: str, remove: bool = False) -> dict:
     s = json.loads(json.dumps(settings))
     hooks = s.setdefault("hooks", {})
-    for event in {e for e, *_ in HOOKS}:
+    if scope == "project":
+        env = s.setdefault("env", {})
+        for k, v in PROJECT_ENV.items():
+            if remove:
+                if env.get(k) == v:
+                    del env[k]
+            else:
+                env.setdefault(k, v)
+        if not env:
+            del s["env"]
+    for event in dict.fromkeys(e for e, *_ in HOOKS):
         hooks[event] = [e for e in hooks.get(event, []) if not is_sdlc_hook(e)]
     if not remove:
-        for event, matcher, script, timeout in HOOKS:
-            entry = {"hooks": [{"type": "command", "command": hook_command(scope, script), "timeout": timeout}]}
+        for event, matcher, script, timeout, block in HOOKS:
+            h = {"type": "command", "command": hook_command(scope, script), "shell": "bash", "timeout": timeout}
+            if block:
+                h["onFailure"] = "block"   # hook 自体が動かない（bash・Python が無い等）ときも素通りさせない
+            entry = {"hooks": [h]}
             if matcher:
                 entry = {"matcher": matcher, **entry}
             hooks[event].append(entry)

@@ -14,6 +14,7 @@ from pathlib import Path
 
 from . import trace
 from .config import phase_id, phase_index, phase_name
+from .shell import run_shell
 from .state import now
 
 LEVELS = ("must", "should", "may")
@@ -44,7 +45,7 @@ def configured(proj: dict, phase) -> dict[str, list[dict]]:
 
 def _run_cmd(root, cmd: str, timeout: int) -> tuple[str, int | None, str]:
     try:
-        r = subprocess.run(cmd, shell=True, cwd=str(root), capture_output=True, text=True, timeout=timeout)
+        r = run_shell(cmd, root, timeout)
     except subprocess.TimeoutExpired:
         return "fail", None, f"タイムアウト（{timeout} 秒）"
     out = (r.stdout + r.stderr).strip()

@@ -101,3 +101,23 @@
 | 不具合の再発防止観点を本体のチェックリストに追記していた（`~/.claude` だと全プロジェクトに波及） | プロジェクトの `rules/review-<工程ID>.md` に追記する |
 | 全体ルールを `CLAUDE.md` として置いていた（`~/.claude/CLAUDE.md` だと全プロジェクトに波及） | `sdlc/RULES.md` とし、プロジェクトの `CLAUDE.md` から import する |
 | `~/.claude` に置いた本体・設定を Claude が書き換えられる | どのプロジェクトからでも hooks で拒否（インストーラの実行も人に限る） |
+
+---
+
+# Windows 対応
+
+PowerShell・コマンドプロンプトから bash（Git for Windows）を起動できる前提で、Windows で使えるようにした。
+
+| 問題（変更前） | 対応 |
+|---|---|
+| hooks を `python3 ...` で呼んでおり、Windows では `python3` が無い・Store のエイリアスのことが多い | hooks は bash の入口 `hooks/sdlc/run` から起動し、`sdlc/bin/py` が `SDLC_PYTHON` → `python3` → `python` → `py -3` の順に実際に動く Python を探す |
+| hook が起動できない・異常終了すると Claude Code は**素通り**させる（非ブロッキング） | hooks を `onFailure: block` で登録。Python が無い場合は SDLC プロジェクトでのみ拒否（無関係なプロジェクトは止めない） |
+| Windows の Claude Code は既定で PowerShell ツールを使い、Bash ガードが働かない | ガードを `Bash|PowerShell` に適用し、PowerShell の書き込みコマンド・`\` 区切りのパスを検出。プロジェクト配置では PowerShell ツールを無効化して Bash に寄せる |
+| ランチャが Python スクリプト（拡張子なし）で、PowerShell / コマンドプロンプトから実行できない | ランチャを bash スクリプトにし、`scripts\sdlc.cmd`・`scripts\approve.cmd` を追加（cp932 でも動くよう ASCII のみ） |
+| テスト・機械チェックのコマンドを `shell=True`（Windows では cmd.exe）で実行していた | Git Bash で実行（WSL の bash は除外） |
+| 入出力の文字コード（cp932）で日本語・記号が壊れ、hook が異常終了しうる | hooks・CLI を UTF-8 で入出力（`PYTHONUTF8=1`、標準入出力の再設定） |
+| `core.autocrlf` で bash スクリプトが CRLF になり動かない／ゲートのハッシュが OS で変わる | `.gitattributes` で LF に固定。成果物ハッシュはテキストの CRLF を LF にそろえて計算 |
+| mintty（Git Bash の画面）では TTY と判定されず承認できない／新しいコンソールを開けば Claude でも TTY を得られる | Windows では `scripts\approve.cmd` を案内。`CLAUDECODE` が設定されたプロセスからの承認を拒否。`approve` の間接的な呼び出し（cmd /c・Start-Process・script -c 等）も検出 |
+| Windows で動作確認できない | GitHub Actions で Linux / Windows / macOS × Python 3.9 / 3.12 の自己テストを実行 |
+
+あわせて、Bash ガードが `install.py` というファイル名を `install` コマンド（書き込み）と誤認していたのを直した。

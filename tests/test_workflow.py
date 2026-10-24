@@ -22,12 +22,18 @@ os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 # ~/.claude をテスト用の一時ディレクトリにする（実環境の ~/.claude に触れない）
 TEST_HOME = Path(tempfile.mkdtemp(prefix="sdlc-home-"))
 os.environ["HOME"] = str(TEST_HOME)
+os.environ["USERPROFILE"] = str(TEST_HOME)   # Windows の Python は HOME ではなく USERPROFILE を見る
+os.environ.pop("CLAUDECODE", None)           # Claude Code の中で実行されても approve の検査を再現できるように
 
 REPO = Path(__file__).resolve().parents[1]
 BIN = REPO / ".claude" / "sdlc" / "bin"
 HOOKS = REPO / ".claude" / "hooks" / "sdlc"
 INSTALLER = REPO / "install.py"
 sys.path.insert(0, str(REPO / ".claude" / "sdlc" / "lib"))
+
+from sdlc_lib.shell import find_bash  # noqa: E402
+
+BASH = find_bash() or "bash"
 
 from sdlc_lib import checks, defects, fm, gates, records, state, tasks, tdd, trace  # noqa: E402
 from sdlc_lib.config import load_project, phase_of_path, project_problems  # noqa: E402
@@ -590,8 +596,12 @@ class TestAdapters(Base):
 
 
 
+def home_env(home) -> dict:
+    return {"HOME": str(home), "USERPROFILE": str(home)}
+
+
 def install(*args, home=None):
-    env = dict(os.environ, HOME=str(home or TEST_HOME))
+    env = dict(os.environ, **home_env(home or TEST_HOME))
     return subprocess.run([sys.executable, str(INSTALLER), *args], capture_output=True, text=True, env=env)
 
 
@@ -612,14 +622,14 @@ class TestPlacement(unittest.TestCase):
         self.user = self.home / ".claude"
         self.proj = Path(tempfile.mkdtemp(prefix="sdlc-proj-"))
         subprocess.run(["git", "init", "-q"], cwd=self.proj)
-        self.env = {"HOME": str(self.home)}
+        self.env = home_env(self.home)
 
     def tearDown(self):
         shutil.rmtree(self.home, ignore_errors=True)
         shutil.rmtree(self.proj, ignore_errors=True)
 
     def sdlc(self, *args, cwd=None):
-        return subprocess.run([sys.executable, str(self.proj / "scripts" / "sdlc"), *args], cwd=cwd or self.proj,
+        return subprocess.run([BASH, str(self.proj / "scripts" / "sdlc"), *args], cwd=cwd or self.proj,
                               capture_output=True, text=True, env=dict(os.environ, **self.env))
 
     def user_init(self):
@@ -641,7 +651,11 @@ class TestPlacement(unittest.TestCase):
         self.assertIn("Stop", s["hooks"])
         cmds = [h["command"] for e in s["hooks"]["PreToolUse"] for h in e["hooks"]]
         self.assertEqual(len(cmds), 3)
-        self.assertTrue(all(c.startswith('python3 "$HOME/.claude/hooks/sdlc/') for c in cmds))
+        home = (self.home / ".claude").as_posix()
+        self.assertTrue(all(c.startswith(f'bash "{home}/hooks/sdlc/run" ') for c in cmds), cmds)
+        guards = [h for e in s["hooks"]["PreToolUse"] for h in e["hooks"]]
+        self.assertTrue(all(h.get("onFailure") == "block" and h.get("shell") == "bash" for h in guards))
+        self.assertIn("Bash|PowerShell", [e["matcher"] for e in s["hooks"]["PreToolUse"]])
         self.assertEqual(len(s["hooks"]["SessionStart"]), 1)
         r = install("--user", "--uninstall", home=self.home)
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -691,7 +705,8 @@ class TestPlacement(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         s = json.loads((self.proj / ".claude/settings.json").read_text())
         cmds = [h["command"] for e in s["hooks"]["PreToolUse"] for h in e["hooks"]]
-        self.assertTrue(all("$CLAUDE_PROJECT_DIR/.claude/hooks/sdlc/" in c for c in cmds))
+        self.assertTrue(all("${CLAUDE_PROJECT_DIR}/.claude/hooks/sdlc/run" in c for c in cmds))
+        self.assertEqual(s["env"]["CLAUDE_CODE_USE_POWERSHELL_TOOL"], "0")
         self.user_init()
         self.assertIn("@.claude/sdlc/RULES.md", (self.proj / "CLAUDE.md").read_text())
         self.assertNotIn("@~/.claude/sdlc/RULES.md", (self.proj / "CLAUDE.md").read_text())
@@ -772,6 +787,93 @@ class TestPlacement(unittest.TestCase):
         actual = json.loads((REPO / ".claude/settings.json").read_text(encoding="utf-8"))
         self.assertEqual(actual, expected)
 
+
+
+class TestWindowsSupport(Base):
+    """Windows（Git Bash / PowerShell / コマンドプロンプト）で問題になる箇所。"""
+
+    def test_crlf_does_not_change_gate_hash(self):
+        self.r.write("docs/00-intake/a.md", "x")
+        (self.r.dir / "docs/00-intake/a.md").write_bytes(b"line1\nline2\n")
+        h1, _ = gates.artifacts(self.r.dir, self.r.proj, 0)
+        (self.r.dir / "docs/00-intake/a.md").write_bytes(b"line1\r\nline2\r\n")
+        h2, _ = gates.artifacts(self.r.dir, self.r.proj, 0)
+        self.assertEqual(h1, h2)
+        (self.r.dir / "input/bin.dat").write_bytes(b"\0\r\n")
+        h3, _ = gates.artifacts(self.r.dir, self.r.proj, 0)
+        (self.r.dir / "input/bin.dat").write_bytes(b"\0\n")
+        self.assertNotEqual(h3, gates.artifacts(self.r.dir, self.r.proj, 0)[0])  # バイナリはそのまま
+
+    def shell(self, tool, cmd):
+        r = self.r.hook("guard_bash.py", {"command": cmd}, env=None) if tool == "Bash" else None
+        if tool != "Bash":
+            data = {"tool_name": tool, "tool_input": {"command": cmd}, "cwd": str(self.r.dir)}
+            e = dict(os.environ, CLAUDE_PROJECT_DIR=str(self.r.dir))
+            e.pop("SDLC_MAINTENANCE", None)
+            r = subprocess.run([sys.executable, str(HOOKS / "guard_bash.py")], input=json.dumps(data),
+                               capture_output=True, text=True, cwd=self.r.dir, env=e)
+        return r.returncode == 0
+
+    def test_powershell_commands(self):
+        ps = "PowerShell"
+        self.assertFalse(self.shell(ps, "Set-Content docs\\01-requirements\\a.md 'x'"))
+        self.assertFalse(self.shell(ps, "Remove-Item .claude\\sdlc\\RULES.md"))
+        self.assertFalse(self.shell(ps, "'x' | Out-File state\\gates\\00-intake.md"))
+        self.assertFalse(self.shell(ps, "& .\\scripts\\approve.cmd 02"))
+        self.assertFalse(self.shell(ps, "Start-Process cmd -ArgumentList '/c scripts\\approve.cmd 02 --yes'"))
+        self.assertFalse(self.shell(ps, "Copy-Item x $env:USERPROFILE\\.claude\\sdlc\\RULES.md"))
+        self.assertTrue(self.shell(ps, "Get-Content state\\gates\\00-intake.md"))
+        self.assertTrue(self.shell(ps, "scripts\\sdlc.cmd status"))
+        self.assertTrue(self.shell(ps, "python -m unittest discover -s tests 2>&1 | Out-Null"))
+
+    def test_bash_windows_paths_and_install_word(self):
+        self.assertFalse(self.shell("Bash", "cp x /c/Users/me/.claude/sdlc/RULES.md"))
+        self.assertFalse(self.shell("Bash", "echo x > C:\\Users\\me\\.claude\\settings.json"))
+        self.assertFalse(self.shell("Bash", "bash -c 'script -qc \"scripts/approve 02 --yes\"'"))
+        self.assertTrue(self.shell("Bash", "grep -n hooks install.py"))   # install.py という名前は書き込みではない
+        self.assertTrue(self.shell("Bash", "git log --oneline -3"))
+
+    def test_approve_refuses_inside_claude_code(self):
+        r = subprocess.run([sys.executable, str(BIN / "approve"), "0"], capture_output=True, text=True,
+                           cwd=self.r.dir, env=dict(os.environ, CLAUDECODE="1"))
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("Claude Code", r.stderr)
+
+    def test_hook_entry_run_wrapper(self):
+        run_sh = HOOKS / "run"
+        data = json.dumps({"tool_input": {"file_path": str(self.r.dir / "docs/01-requirements/a.md")},
+                           "cwd": str(self.r.dir)})
+        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(self.r.dir))
+        r = subprocess.run([BASH, str(run_sh), "guard_write.py"], input=data, capture_output=True, text=True, env=env)
+        self.assertEqual(r.returncode, 2, r.stderr)          # Python 経由でガードが働く
+        r = subprocess.run([BASH, str(run_sh), "guard_write.py"], input=data, capture_output=True, text=True,
+                           env=dict(env, SDLC_PYTHON="/nonexistent/python"))
+        self.assertEqual(r.returncode, 2)                     # Python が無い SDLC プロジェクトは拒否
+        self.assertIn("Python", r.stderr)
+        other = Path(tempfile.mkdtemp(prefix="sdlc-other-"))
+        try:
+            r = subprocess.run([BASH, str(run_sh), "guard_write.py"], input=data, capture_output=True, text=True,
+                               env=dict(env, SDLC_PYTHON="/nonexistent/python", CLAUDE_PROJECT_DIR=str(other)))
+            self.assertEqual(r.returncode, 0)                 # 無関係なプロジェクトは止めない
+        finally:
+            shutil.rmtree(other, ignore_errors=True)
+
+    def test_launchers_and_gitattributes(self):
+        from sdlc_lib import project_setup
+        project_setup.write_launchers(self.r.dir)
+        cmd = (self.r.dir / "scripts/approve.cmd").read_bytes()
+        self.assertIn(b"\r\n", cmd)
+        self.assertTrue(all(b < 128 for b in cmd))           # cmd.exe のコードページに依存しない
+        self.assertNotIn(b"\r\n", (self.r.dir / "scripts/sdlc").read_bytes())
+        project_setup.ensure_gitattributes(self.r.dir)
+        self.assertIn("scripts/sdlc text eol=lf", (self.r.dir / ".gitattributes").read_text(encoding="utf-8"))
+        self.assertFalse(self.r.can_write("scripts/sdlc.cmd")[0])
+
+    def test_run_shell_missing_command_is_skipped(self):
+        from sdlc_lib.shell import run_shell
+        self.assertEqual(run_shell("no_such_command_xyz", self.r.dir).returncode, 127)
+        r = run_shell("echo 日本語 && test -d .", self.r.dir)
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "日本語"))
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,15 +9,21 @@ SDLC ワークフロー本体は、次の 2 通りに置けます。どちらも
 
 A と B を併用すると、**プロジェクトの `.claude/` が `~/.claude/` より優先**されます（後述「上書きの仕組み」）。
 
+Linux・macOS・Windows（Git for Windows の Git Bash を使う）で動きます。Windows 固有の注意は「[9. Windows で使う](#9-windows-で使う)」。
+以下のコマンド例は bash の書式です（Windows では Git Bash で実行するか、9 章の PowerShell / コマンドプロンプトの書き方に読み替えてください）。
+
 ---
 
 ## 1. 前提
 
-- Python 3.9 以上、git
-- 本体の依存パッケージ（hooks もこれを使うので、Claude Code が呼ぶ `python3` に入れる）:
+- Python 3.9 以上、git、bash（Windows では Git for Windows）
+- 本体の依存パッケージ:
   ```bash
-  pip install -r requirements.txt   # PyYAML, openpyxl, python-docx, python-pptx
+  python3 -m pip install -r requirements.txt   # PyYAML, openpyxl, python-docx, python-pptx
   ```
+  hooks と `scripts/sdlc` は、`python3` → `python` → `py -3` の順に、3.9 以上で PyYAML を読み込める Python を探して使います。
+  特定の Python を使わせたいときは環境変数 `SDLC_PYTHON` に指定します（例: `SDLC_PYTHON="py -3.12"`）。
+  どの Python が使われるかは `scripts/sdlc where` で確認できます。
 - PowerPoint の図をスライド画像として読み取りたい場合は LibreOffice（`soffice`）と `pdftoppm`（任意）
 
 ---
@@ -194,8 +200,9 @@ python3 install.py --project <dir> --uninstall
 
 ## 7. ワークフロー本体を変更する（メンテナンスモード）
 
-本体・設定ファイル・ランチャは、ゲートの強制機構を守るため Claude が編集できません。
-本体を直すときは、人が環境変数を付けて Claude Code を起動します。
+本体・設定ファイル・ランチャは、ゲートの強制機構を守るため Claude が編集できません。本体を直す方法は 2 つあります。
+
+### 方法 1: メンテナンスモードでセッションを開始する（基本）
 
 ```bash
 SDLC_MAINTENANCE=1 claude
@@ -204,10 +211,29 @@ SDLC_MAINTENANCE=1 claude
 クラウド環境では、環境の設定で環境変数 `SDLC_MAINTENANCE=1` を追加してから**新しいセッション**を開始します
 （環境変数はセッション開始時に読み込まれるため、実行中のセッションでは切り替わりません。
 `.claude/settings.local.json` や `~/.claude/settings.json` の `env` に書く方法は、Claude が自分で保護を外せないよう hooks で禁止しています）。
-作業が終わったら外してください。`state/gates/` はこのモードでも書き込めません。
+このモードでは Claude が Write / Edit ツールで本体を直接編集できます。作業が終わったら外してください。
+`state/gates/` はこのモードでも書き込めません。
+
+### 方法 2: 人の指示のもと、適用のコマンドにだけ指定する
+
+環境変数を変えずに、実行中のセッションで本体を更新する方法です。**人が明示的に指示したときだけ**使います。
+
+1. Claude は本体の変更を、リポジトリの外の作業コピーで実装し、自己テストを通す（リポジトリ内の本体は書き換えない）。
+2. 変更を 1 つのパッチと適用スクリプトにまとめ、人に内容を示す。
+3. 人の指示を受けて、適用スクリプトを 1 回の Bash 呼び出しとして、そのコマンドにだけ指定して実行する:
+   ```bash
+   SDLC_MAINTENANCE=1 bash <適用スクリプト>     # パッチ適用 → 自己テスト → コミット
+   ```
+
+> **この方法が通る理由と限界**: コマンドの先頭に付けた環境変数は hooks には渡らず、hooks の判定はメンテナンスモードに
+> なりません。通るのは、Bash ガードがコマンドの文字列だけを見るため、スクリプトの中で行う書き換えまでは検出しないからです。
+> つまり Claude が自分の判断で同じことをすれば保護をすり抜けられます。保護の実効性は、Claude がこの手順を人の指示なしに
+> 使わないこと（`RULES.md` の絶対ルール）と、ゲート記録・成果物ハッシュ・git の履歴による事後の検知に依存します。
+> より強く守りたい場合は方法 1 だけを使い、変更は人がレビューしてからコミットしてください。
 
 このソースリポジトリでの開発も同じです（ソースリポジトリ自体がプロジェクト配置になっています）。
 変更後は自己テスト `python3 -m unittest discover -s tests` を通し、`python3 install.py ...` で配置し直します。
+Windows / macOS / Linux での自己テストは GitHub Actions（`.github/workflows/tests.yml`）でも実行されます。
 
 ---
 
@@ -217,7 +243,72 @@ SDLC_MAINTENANCE=1 claude
 |---|---|
 | `/sdlc` などのスキルが出てこない | A: `~/.claude/skills/` に、B: `.claude/skills/` に置かれているか。Claude Code を再起動する |
 | hooks が効いていない | `/hooks` で SDLC の hooks（`hooks/sdlc/guard_*.py`）が登録されているか。A では `project.yaml` に `workflow: sdlc` があるか |
-| すべての書き込みが「ガードの内部エラー」で拒否される | hooks が使う `python3` に `requirements.txt` の依存が入っているか |
+| すべての書き込みが「ガードの内部エラー」で拒否される | hooks が使う Python（`scripts/sdlc where` で表示）に `requirements.txt` の依存が入っているか |
+| 「Python 3.9 以上が見つからない」で拒否される | Python 3.9 以上が PATH にあるか。`SDLC_PYTHON` を設定した場合はその値が正しいか（設定するとそれだけを使う） |
+| hooks が実行できず、すべての操作が拒否される | hooks は `onFailure: block` で登録されている（hooks が動かないときに素通りさせないため）。bash（Windows では Git Bash）と Python があるか確認する |
 | `SDLC ワークフロー本体が見つかりません` | A なら `~/.claude/sdlc/bin/sdlc`、B なら `.claude/sdlc/bin/sdlc` があるか（`install.py` を実行したか） |
 | 全体ルール（RULES.md）が読み込まれていない | `CLAUDE.md` の import 行（`@~/.claude/sdlc/RULES.md` か `@.claude/sdlc/RULES.md`）と、外部 import の許可。`scripts/sdlc init` を再実行すると配置に合わせて直る |
 | A と B のどちらが使われているか分からない | `scripts/sdlc where` |
+
+---
+
+## 9. Windows で使う
+
+### 前提
+
+| 必要なもの | 確認・補足 |
+|---|---|
+| Git for Windows（Git Bash） | Claude Code の Bash ツールと、このワークフローの hooks は Git Bash で動きます。Claude Code が Git Bash を見つけられない場合は `CLAUDE_CODE_GIT_BASH_PATH` を設定します（Claude Code の設定）。**WSL の bash では動きません** |
+| Python 3.9 以上 | python.org のインストーラ（`py` ランチャ付き）を推奨。Microsoft Store の `python3` エイリアスだけでは動きません（自動で除外します） |
+| 依存パッケージ | PowerShell で `py -3 -m pip install -r requirements.txt`（hooks が使う Python に入れる。`scripts/sdlc where` で確認） |
+
+### インストール（PowerShell / コマンドプロンプト）
+
+```powershell
+git clone <このリポジトリ> sdlc-workflow
+cd sdlc-workflow
+py -3 install.py --user                       # ~/.claude（C:\Users\<名前>\.claude）に配置
+py -3 install.py --project C:\work\my-app      # プロジェクト配置の場合
+```
+
+`~/.claude/settings.json` の hooks は `bash "C:/Users/<名前>/.claude/hooks/sdlc/run" guard_write.py` の形で登録され、
+Git Bash から実行されます。
+
+### Claude Code の中（Bash ツールと PowerShell ツール）
+
+Windows の Claude Code は、Git Bash があっても既定で PowerShell ツールを使ってコマンドを実行します。
+
+- ガード（`guard_bash.py`）は **Bash ツールと PowerShell ツールの両方**を検査します（`Set-Content`・`Out-File`・`Remove-Item`・
+  `Copy-Item`・`>` などの書き込み、`approve` の呼び出し、`\` 区切りのパスも検出）。
+- スキル・ルールは bash の書式でコマンドを書いているため、**Bash ツールを使う設定を推奨**します。
+  - プロジェクト配置（B）では、インストーラが `.claude/settings.json` に `"CLAUDE_CODE_USE_POWERSHELL_TOOL": "0"` を入れます。
+  - ユーザ配置（A）では、必要に応じて人が `~/.claude/settings.json` の `env` に同じ設定を追加してください
+    （このファイルは Claude からは編集できません）。
+- PowerShell ツールで実行する場合、ランチャは `scripts\sdlc.cmd status` のように呼びます。
+
+### 人が使うコマンド
+
+| 用途 | PowerShell / コマンドプロンプト | Git Bash |
+|---|---|---|
+| 承認 | `.\scripts\approve.cmd 02` | `winpty bash scripts/approve 02`（mintty では TTY と判定されないため `winpty` が必要） |
+| 状態の確認 | `.\scripts\sdlc.cmd status` | `scripts/sdlc status` |
+
+承認スクリプトは、対話端末（TTY）以外から、または Claude Code から起動されたプロセス（環境変数 `CLAUDECODE` がある）からは
+実行できません。Windows Terminal / PowerShell / コマンドプロンプトの画面で人が実行してください。
+
+### 改行コード
+
+- `scripts/sdlc init` はプロジェクトの `.gitattributes` に、ランチャと本体の bash スクリプトを LF に固定する設定を追加します
+  （`core.autocrlf` で CRLF になると bash で動かないため）。ソースリポジトリにも同様の `.gitattributes` があります。
+- ゲートの成果物ハッシュは、テキストファイルの CRLF / LF の違いを無視して計算します。Windows と Linux / macOS の
+  メンバーが混在しても、改行の変換だけでゲートが無効になることはありません。
+
+### 取り込み（PowerPoint の図）
+
+スライドの画像化に使う LibreOffice（`soffice`）と `pdftoppm`（Poppler）は任意です。Windows では PATH に通っていなければ
+図は「要画像読取（画像化できず）」として残り、人が画像を用意するか質問リストに回します。
+
+### Windows での既知の制約
+
+- WSL の bash は使えません（Windows のパスを扱えないため）。WSL 内で Claude Code を動かす場合は Linux として扱います。
+- テストを `src_dir` の中に置く言語慣習は、他の OS と同様に使えません。

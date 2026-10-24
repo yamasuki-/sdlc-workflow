@@ -11,9 +11,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import subprocess
+import subprocess  # noqa: F401  TimeoutExpired のため
 from pathlib import Path
 
+from .shell import run_shell
 from .state import now
 
 SKIP_DIRS = {".git", "__pycache__", "node_modules", "target", "build", "dist", ".venv", "venv",
@@ -66,7 +67,7 @@ def run_tests(root, proj: dict) -> tuple[bool, str]:
     cmd = proj["commands"]["test"]
     timeout = int(proj.get("tdd", {}).get("hook_timeout_sec", 300))
     try:
-        r = subprocess.run(cmd, shell=True, cwd=str(root), capture_output=True, text=True, timeout=timeout)
+        r = run_shell(cmd, root, timeout)
     except subprocess.TimeoutExpired:
         return False, f"テストがタイムアウトしました（{timeout}秒）。失敗として扱います。"
     out = (r.stdout + r.stderr)[-2000:]

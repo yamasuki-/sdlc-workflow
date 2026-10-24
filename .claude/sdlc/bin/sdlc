@@ -16,6 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))  # <.claude>/sdlc/lib
 
 from sdlc_lib import checks, defects, gates, project_setup, records, state, tasks, tdd, trace  # noqa: E402
+from sdlc_lib.shell import find_bash, run_shell  # noqa: E402
 from sdlc_lib.config import (PHASE_IDS, PHASES, ConfigError, body_dirs, find_root, install_mode,  # noqa: E402
                              load_project, phase_id, phase_index, phase_name, project_problems,
                              resolve_body_file)
@@ -160,6 +161,8 @@ def cmd_init(a):
         print(f"CLAUDE.md に全体ルールの import を設定しました: {line}")
     for ln in project_setup.ensure_gitignore(root):
         print(f".gitignore に追加しました: {ln}")
+    for ln in project_setup.ensure_gitattributes(root):
+        print(f".gitattributes に追加しました: {ln}")
     if not (root / "project.yaml").exists():
         tpl = resolve_body_file("templates/project.yaml", root)
         if tpl:
@@ -184,6 +187,8 @@ def cmd_where(a):
     print(f"プロジェクト: {root}")
     print(f"配置: {install_mode(root)}（project = プロジェクトの .claude/、user = ~/.claude/）")
     print(f"実行中の本体: {Path(__file__).resolve().parent.parent}")
+    print(f"Python: {sys.executable}（{sys.version.split()[0]}）")
+    print(f"bash（テスト・機械チェックの実行に使用）: {find_bash() or '見つかりません'}")
     dirs = body_dirs(root)
     for d in dirs:
         print(f"  {'✔' if d.exists() else '·'} {d}")
@@ -462,7 +467,7 @@ def cmd_test_run(a):
         die(f"project.yaml の commands.{key} が未設定です。")
     timeout = int(proj.get("check_timeout_sec") or 300)
     try:
-        r = subprocess.run(cmd, shell=True, cwd=str(root), capture_output=True, text=True, timeout=timeout)
+        r = run_shell(cmd, root, timeout)
         rc, out = r.returncode, (r.stdout + r.stderr)
     except subprocess.TimeoutExpired:
         rc, out = None, f"タイムアウト（{timeout} 秒）"
@@ -611,7 +616,7 @@ def cmd_defect_close(a):
     rt = meta.get("reproduction_test")
     if defects.kind_of(a.id) == "defect" and (not rt or not Path(root, rt).exists()):
         die(f"再現テストがありません: {rt}")
-    r = subprocess.run(proj["commands"]["test"], shell=True, cwd=str(root), capture_output=True, text=True)
+    r = run_shell(proj["commands"]["test"], root)
     if r.returncode != 0:
         die("テストが全件成功していません（再現テスト Green ＋ 回帰テスト全通過が必要）:\n" + (r.stdout + r.stderr)[-3000:])
     body = defects.log(body, "検証済（全テスト成功）")

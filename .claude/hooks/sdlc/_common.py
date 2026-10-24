@@ -25,10 +25,17 @@ def _lib_dir() -> Path:
 
 sys.path.insert(0, str(_lib_dir()))
 
+# Windows でも Claude Code とのやり取り（JSON・メッセージ）を UTF-8 で行う
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 
 def read_input() -> dict:
     try:
-        return json.load(sys.stdin)
+        return json.loads(sys.stdin.buffer.read().decode("utf-8", errors="replace"))
     except ValueError:
         return {}
 

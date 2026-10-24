@@ -14,11 +14,13 @@ description: プロジェクト固有情報 project.yaml（言語・テストフ
 
 ## 手順
 
-1. 依存関係を確認する: `python3 -c "import yaml, openpyxl, docx, pptx"`。
-   失敗したら `pip install -r requirements.txt` を人に依頼する（hook も PyYAML を使う）。
+1. 本体が使う Python と依存関係を確認する:
+   `bash "${CLAUDE_SKILL_DIR}/../../sdlc/bin/py" -c "import yaml, openpyxl, docx, pptx"`
+   失敗したら、その Python（`bash "${CLAUDE_SKILL_DIR}/../../sdlc/bin/py" --which` で分かる）に
+   `-m pip install -r requirements.txt` で入れるよう人に依頼する（hooks も同じ Python で動く）。
 2. **準備**: プロジェクトにランチャ `scripts/sdlc` が無ければ、本体を直接呼んで作る:
-   `python3 "${CLAUDE_SKILL_DIR}/../../sdlc/bin/sdlc" init`
-   これでランチャ（`scripts/sdlc`・`scripts/approve`）、`state/`・`docs/`、`.gitignore`、
+   `bash "${CLAUDE_SKILL_DIR}/../../sdlc/bin/py" "${CLAUDE_SKILL_DIR}/../../sdlc/bin/sdlc" init`
+   これでランチャ（`scripts/sdlc`・`scripts/approve` と Windows 用の `.cmd`）、`state/`・`docs/`、`.gitignore`・`.gitattributes`、
    CLAUDE.md の全体ルール import（`@~/.claude/sdlc/RULES.md`、プロジェクト配置なら `@.claude/sdlc/RULES.md`）、
    `project.yaml` の雛形（`workflow: sdlc` 付き）が用意される。以降は `scripts/sdlc` を使う。
    CLAUDE.md の import は次回の起動から読み込まれる（初回は外部ファイルの読み込み許可を求められることがある）。
@@ -36,6 +38,7 @@ description: プロジェクト固有情報 project.yaml（言語・テストフ
    - `common` は全工程、工程 ID のブロック（例 `05-implementation`）はその工程だけに適用される。
      文書工程向けに Markdown lint や Mermaid 構文検査を common に置いてもよい。
    - 自動修正するコマンド（`--fix` / `--write`）は使わない（検査のみ）。
+   - コマンドは bash の書式で書く（Windows でも Git Bash で実行される）。
 6. `project.yaml` を書き、`scripts/sdlc project check` が通るまで直す。
    - `src_dir`・テストディレクトリは `docs/` `input/` `state/` `scripts/` `.claude/` 等と重ねない。
    - テストを src_dir 配下に置く言語慣習（Go の `_test.go` 等）はこのワークフローでは使えないため、別ディレクトリにする。

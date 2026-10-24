@@ -7,6 +7,9 @@ Claude Code 上で動く、V 字モデルのソフトウェア開発ワークフ
 本体は `~/.claude/`（全プロジェクト共通）に置いて使うのが基本で、プロジェクトの `.claude/` に置けば
 そのプロジェクト単体でも使え、`~/.claude/` 版を上書きできます。**インストールと使い方は [USAGE.md](USAGE.md)**。
 
+対応環境: Linux / macOS / Windows（Git for Windows の Git Bash と Python 3.9 以上。PowerShell・コマンドプロンプトからも
+ランチャ `scripts\sdlc.cmd`・`scripts\approve.cmd` で操作できます。詳細は USAGE.md「9. Windows で使う」）。
+
 仕様の原典: [`spec/sdlc-workflow-proposal.md`](spec/sdlc-workflow-proposal.md) /
 採否判定: [`spec/adoption-report.md`](spec/adoption-report.md)
 
@@ -37,12 +40,12 @@ Claude Code 上で動く、V 字モデルのソフトウェア開発ワークフ
 
 ```bash
 pip install -r requirements.txt     # 本体の依存（Python 3.9+）
-python3 install.py --user           # ~/.claude/ に配置（プロジェクト単体なら --project <dir>）
+python3 install.py --user           # ~/.claude/ に配置（プロジェクト単体なら --project <dir>。Windows は py -3 install.py）
 cd <プロジェクト> && claude
 > /sdlc-init                        # ランチャ scripts/sdlc・CLAUDE.md の import・project.yaml を準備
 # input/ に要求ドキュメントを置く
 > /sdlc                             # 工程 0 から実行。ゲートで停止する
-scripts/approve 00                  # 人が端末で承認（Claude からは実行できない）
+scripts/approve 00                  # 人が端末で承認（Claude からは実行できない。Windows は .\scripts\approve.cmd 00）
 > /sdlc                             # 次工程へ。中断しても /sdlc で続きから再開
 ```
 
@@ -66,13 +69,14 @@ scripts/approve 00                  # 人が端末で承認（Claude からは�
 |---|---|
 | ゲート（`guard_write.py`） | 工程 k の成果物領域へは、工程 0..k-1 のゲートがすべて有効なときだけ書き込める。承認済み工程の成果物は変更不可 |
 | ゲートの有効性 | 判定が承認／条件付き承認 **かつ** 成果物の SHA-256 が承認時と一致 **かつ** 不具合による無効化なし |
-| 自己承認の防止 | `state/gates/` への書き込みは常に拒否。`scripts/approve` は TTY 必須（Claude の Bash は TTY なし）。Bash からの実行も拒否 |
+| 自己承認の防止 | `state/gates/` への書き込みは常に拒否。`scripts/approve` は TTY 必須で、Claude Code から起動されたプロセス（`CLAUDECODE`）では動かない。Bash / PowerShell からの呼び出しも拒否 |
+| hooks が動かないとき | hooks は bash の入口 `run` 経由で起動し（Python を自動で探す）、`onFailure: block` で登録する。bash・Python が無い等で hooks が動かなければ、SDLC プロジェクトでは操作を拒否する（素通りさせない） |
 | 設定ファイル・本体の保護 | `~/.claude/settings*.json` と `~/.claude` に置いた本体は、どのプロジェクトからも Claude は編集できない。SDLC プロジェクトでは、プロジェクトの `.claude/settings*.json`・`.claude` に置いた本体・ランチャ `scripts/sdlc`・`scripts/approve` も編集できない |
 | 適用範囲 | `~/.claude` の hooks は、`project.yaml` に `workflow: sdlc` があるプロジェクトでだけ工程・TDD を検査する（他のプロジェクトには影響しない）。プロジェクトに hooks があれば `~/.claude` 側は何もしない |
 | TDD（`guard_write.py`） | `src_dir` の編集前に `commands.test` を実行し、失敗テストが無ければ拒否（そのタスクで Red を観測後の Refactor は可） |
 | テスト改ざん防止 | test-writer / implementer を分離。単体テストは工程 4 の承認で凍結され、実装工程では変更不可 |
 | 工程スキル起動（`guard_skill.py`） | 前工程のゲートが無効なら `phase-*` スキルの起動を拒否 |
-| Bash（`guard_bash.py`） | 成果物・ゲート・ワークフロー本体を Bash で書き換えるコマンドを拒否（ヒューリスティック） |
+| シェル（`guard_bash.py`） | 成果物・ゲート・ワークフロー本体を Bash / PowerShell で書き換えるコマンドを拒否（ヒューリスティック） |
 
 ### 限界
 
@@ -113,9 +117,10 @@ sdlc/
   checklists/                 工程別レビューチェックリスト
   bin/sdlc                    状態管理 CLI
   bin/approve                 人が実行する承認スクリプト
+  bin/py                      本体を動かす Python を探して実行する（SDLC_PYTHON で指定可）
   lib/sdlc_lib/               共通ライブラリ（ゲート・タスク・トレース・TDD・不具合・機械チェック）
   lib/intake/                 取り込みの形式別アダプタ（adapters/ にモジュールを足せば形式を追加できる）
-hooks/sdlc/                   ゲート・TDD・Bash・スキル起動のガード
+hooks/sdlc/                   ゲート・TDD・シェル・スキル起動のガード（入口は bash の run）
 skills/                       sdlc, sdlc-init, phase-*（8 工程）, defect, change
 agents/                       analyst, designer, test-writer, implementer, reviewer, security-reviewer,
                               investigator, current-analyst, solution-proposer
@@ -128,6 +133,8 @@ settings.json                 hooks と permissions（インストーラが追�
 CLAUDE.md                     全体ルールの import（@~/.claude/sdlc/RULES.md など。scripts/sdlc init が追加）
 project.yaml                  プロジェクト固有情報（workflow: sdlc、言語・テスト・コマンド。/sdlc-init で作成）
 scripts/sdlc, scripts/approve 本体へのランチャ（プロジェクトの .claude/sdlc を優先、無ければ ~/.claude/sdlc）
+scripts/*.cmd                 Windows の PowerShell / コマンドプロンプト用ランチャ
+.gitattributes                ランチャ・bash スクリプトの改行を LF に固定（scripts/sdlc init が追加）
 input/                        要求ドキュメント原本
 docs/<工程>/                  各工程の成果物（plan.md / summary.md / review.md を含む）
 state/
@@ -149,6 +156,7 @@ rules/                        プロジェクト固有ルール・追加のレ�
 .claude/                      本体（上の「本体」と同じ形。プロジェクト配置として hooks も有効）
 install.py                    インストーラ（--user / --project <dir> / --uninstall / --dry-run）
 tests/                        ワークフロー自己テスト
+.github/workflows/tests.yml   自己テストを Linux / Windows / macOS で実行する CI
 examples/                     動作確認用のサンプル要求ドキュメント
 spec/                         仕様の原典と採否レポート
 USAGE.md                      インストールと使い方

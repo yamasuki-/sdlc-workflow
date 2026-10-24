@@ -42,8 +42,10 @@ GATES_DIR = "state/gates"
 PROTECTED_PATHS = [
     ".claude/settings.json",
     ".claude/settings.local.json",
-    "scripts/sdlc",       # 本体へのランチャ
+    "scripts/sdlc",       # 本体へのランチャ（bash 用と Windows の cmd / PowerShell 用）
     "scripts/approve",
+    "scripts/sdlc.cmd",
+    "scripts/approve.cmd",
 ] + [f".claude/{p}" for p in BODY_DIRS + BODY_FILES]
 
 DEFAULT_PROJECT = {
@@ -110,7 +112,8 @@ def phase_name(phase) -> str:
 
 def _git(args, cwd) -> str | None:
     try:
-        r = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True, timeout=30)
+        r = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=30)
     except (OSError, subprocess.SubprocessError):
         return None
     if r.returncode != 0:

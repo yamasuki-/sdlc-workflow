@@ -1,23 +1,39 @@
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/sdlc/run\" session_start.py",
+            "shell": "bash",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Write|Edit|MultiEdit|NotebookEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/sdlc/guard_write.py\"",
-            "timeout": 600
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/sdlc/run\" guard_write.py",
+            "shell": "bash",
+            "timeout": 600,
+            "onFailure": "block"
           }
         ]
       },
       {
-        "matcher": "Bash",
+        "matcher": "Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/sdlc/guard_bash.py\"",
-            "timeout": 60
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/sdlc/run\" guard_bash.py",
+            "shell": "bash",
+            "timeout": 60,
+            "onFailure": "block"
           }
         ]
       },
@@ -26,23 +42,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/sdlc/guard_skill.py\"",
-            "timeout": 60
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/sdlc/session_start.py\"",
-            "timeout": 60
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/sdlc/run\" guard_skill.py",
+            "shell": "bash",
+            "timeout": 60,
+            "onFailure": "block"
           }
         ]
       }
     ]
+  },
+  "env": {
+    "CLAUDE_CODE_USE_POWERSHELL_TOOL": "0"
   },
   "permissions": {
     "deny": [

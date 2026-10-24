@@ -5,13 +5,15 @@
   scripts/approve defect <DEF-ID>   不具合の原因判定・対応方法・やり直し範囲の承認
   scripts/approve change <CR-ID>    変更要求の対応方法・やり直し範囲の承認
 
-自己承認を防ぐため、対話端末（TTY）からの実行でなければ拒否する。
-Claude Code の Bash ツールは TTY を持たないため、このスクリプトを実行できない。
+自己承認を防ぐため、対話端末（TTY）からの実行でなければ拒否する。Claude Code のシェル（Bash / PowerShell ツール）は
+TTY を持たず、また環境変数 CLAUDECODE が設定されるため、そこから（新しいコンソールを開いても）実行できない。
+Windows では PowerShell / コマンドプロンプトから scripts\approve.cmd を実行する。
 """
 from __future__ import annotations
 
 import argparse
 import getpass
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -287,8 +289,12 @@ def main():
     p.add_argument("--comment")
     p.add_argument("--yes", action="store_true", help="最終確認を省略（判定・承認者は引数で指定）")
     args = p.parse_args()
+    if os.environ.get("CLAUDECODE"):
+        die("Claude Code から起動されたプロセスでは承認できません。人が自分の端末で実行してください。")
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
-        die("承認は人が対話端末から実行してください（TTY 以外からの実行は自己承認防止のため拒否します）。")
+        die("承認は人が対話端末から実行してください（TTY 以外からの実行は自己承認防止のため拒否します）。"
+            "\nWindows の Git Bash（mintty）では TTY と判定されないため、PowerShell かコマンドプロンプトで "
+            "scripts\\approve.cmd を実行してください。")
     try:
         root = find_root()
         proj = load_project(root)

@@ -8,6 +8,9 @@
 1. **人間ゲート必須**: 各工程はレビュー後に人の承認を得るまで次工程に進まない。
    - 承認は人が端末で `scripts/approve <工程>` を実行して `state/gates/` に記録する。
    - Claude は `scripts/approve` を実行しない・`state/gates/` に書き込まない（hook で拒否される）。
+   - ワークフロー本体（`.claude/sdlc`・hooks・SDLC のスキル/エージェント・設定ファイル・ランチャ）を、hooks の検査を
+     迂回する方法（スクリプト経由の書き換え、コマンドへの `SDLC_MAINTENANCE=1` の付与など）で変更しない。
+     人が明示的に指示した場合だけ、USAGE.md「7. ワークフロー本体を変更する」の手順で行う。
    - 承認待ちになったら、提示内容とコマンドを人に伝えて**停止する**。
 2. **承認済み成果物は変更しない**: 変更すると成果物ハッシュが変わりゲートが無効になる。
    承認後に誤りが見つかったら `/defect`（不具合対応フロー）、要求を変えたい・機能を足したいなら `/change`（変更要求フロー）で
@@ -57,6 +60,9 @@
 | `scripts/sdlc`・`scripts/approve` | 本体へのランチャ（`scripts/sdlc init` が生成） | 不可 |
 
 ## よく使うコマンド
+
+シェルコマンドは **Bash ツール**で実行する（Windows でも Git Bash）。PowerShell で実行する場合はランチャを
+`scripts\sdlc.cmd ...` と呼ぶ。`scripts/approve`（`scripts\approve.cmd`）は人だけが実行する。
 
 ```
 scripts/sdlc status                 # 現在工程・ゲート・タスク・次のアクション
