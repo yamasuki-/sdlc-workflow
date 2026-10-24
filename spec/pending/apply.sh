@@ -33,4 +33,18 @@ Supplement from software_dev_workflow; install to ~/.claude with project overrid
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_014yTE67hyTw3Jqv6hJEEFie
 MSG
-echo "適用してコミットしました。hooks の場所が変わったため、Claude Code のセッションを開始し直してください（その後 git push）。"
+# 実行中のセッションが古い hooks の場所（.claude/hooks/*.py）を参照し続けても止まらないよう、
+# 新しい場所へ転送する一時ファイルを置く（このチェックアウト限り。コミットしない）
+for f in guard_write guard_bash guard_skill session_start; do
+  cat > ".claude/hooks/$f.py" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+new = Path(__file__).resolve().parent / "sdlc" / Path(__file__).name
+os.execv(sys.executable, [sys.executable, str(new), *sys.argv[1:]])
+PY
+  grep -qxF ".claude/hooks/$f.py" .git/info/exclude 2>/dev/null || echo ".claude/hooks/$f.py" >> .git/info/exclude
+done
+echo "適用してコミットしました。旧 hooks の場所には転送用の一時ファイルを置きました（コミット対象外）。"
+echo "新しいセッションでは新しい hooks（.claude/hooks/sdlc/）が使われます。"
