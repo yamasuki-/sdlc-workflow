@@ -48,7 +48,56 @@
 
 ## 動作確認
 
-- 自己テスト `python3 -m unittest discover -s scripts/tests`（27 件）: ゲートのハッシュ無効化、工程順の書き込み制御、
+- 自己テスト `python3 -m unittest discover -s scripts/tests`（初版 27 件、補完後 36 件）: ゲートのハッシュ無効化、工程順の書き込み制御、
   保護パス、TDD ガード（Red→Green→Refactor・リセット）、Bash ガード、スキル起動ガード、タスク DAG、
   トレース検査・影響範囲、不具合対応の一連（起票→影響範囲→承認→やり直し→クローズ）、4 形式のアダプタ。
 - `examples/sample-requirements.md` と構成図入り pptx で、初期化→取り込み→状態表示→TTY 無し承認の拒否を確認。
+
+---
+
+# software_dev_workflow からの補完
+
+`yamasuki-/software_dev_workflow`（dev-workflow スキルセット）は別の思想（機能単位のフェーズバッチ・Skill 5 / Agent 26・
+レビュー pass で前進）で作られているため参照のみとし、sdlc-workflow に足りないものを本ワークフローの型
+（V 字工程・ハッシュ付き人間ゲート・hooks による強制）に合わせて取り込んだ。採否は依頼者が選定した。
+
+| 参照元の要素 | 判定 | sdlc-workflow での実現 |
+|---|---|---|
+| security-review（OWASP Top 10・LLM Top 10・依存脆弱性・IaC） | 採用 | `security-reviewer` エージェント＋`checklists/security.md`。実装工程の reviewer の後段。不合格の間は承認不可 |
+| auto-check（MUST/SHOULD/MAY の機械チェック、未インストールは skip） | 採用 | `project.yaml` の `checks`＋`scripts/sdlc check`。組み込み MUST にトレース検査。承認時に approve が再実行し MUST 失敗なら承認不可 |
+| testing mode=red/green（Red/Green 確認の分離） | 採用 | `scripts/sdlc test-run --expect red|green` で証跡を工程成果物に残す（言語非依存のため判定は終了コード、件数の確認はレビュアー） |
+| 詳細設計 9 章構成・UI/DB 設計・NFR カテゴリ | 採用 | `templates/detailed-design.md`（サブ機能・IF・シーケンス・状態遷移）、`ui-design.md`・`db-design.md`・`nfr.md` |
+| bug-investigation（エビデンス必須・修正禁止・一時計装の原状復帰・triage） | 採用 | `investigator` を強化（mode=bug / mode=triage）。不具合票に「調査エビデンス」節 |
+| solution-proposal（あるべき姿を起点に複数案、人が選定） | 採用 | `solution-proposer` エージェント。票の `options` / `recommended`、`scripts/approve` で案を選定し `selected_option` に記録 |
+| feature-add-workflow（現行解析→提案→設計差分→承認→TDD） | 採用（形を変更） | `/change` スキル＋`current-analyst`。不具合と同じ差分やり直し機構（票 CR-xxx・やり直し範囲ゲート・ゲート無効化）で扱う |
+| decisions.md / open-questions.md（オーケストレータ専任で一元追記） | 採用 | `state/decisions.md`・`state/open-questions.md`、`scripts/sdlc decision|question` |
+| dev-workflow-overlay（stack/project 2 層ルール・ADD/OVERRIDE/DISABLE） | 採用（簡略化） | `rules/common.md`・`rules/<工程ID>.md`・`rules/review-<工程ID>.md`。言語別プリセットは同梱しない（MUST-7: 言語固有情報はプロジェクト側） |
+| reverse-design-workflow（既存コードから設計を復元） | 不採用 | 思想と規模が大きく異なるため別途検討 |
+| Git 統合（保護ブランチで開始しない・commit 前確認・履歴改変禁止） | 不採用 | 依頼者の選定外 |
+| Cowork 向けフォールバック・進捗報告の粒度 | 一部採用 | タスク指示テンプレートにスコープ規律と出力の長さの規律のみ追加 |
+| フェーズバッチ・per_feature/cross の 2 段レビュー・COMMON 擬似機能 | 不採用 | sdlc-workflow は工程単位で全成果物を 1 体の reviewer が横断レビューする（共通化の観点はレビューで扱う） |
+| human-checkpoint の skip / 無効化 | 不採用 | 人間ゲートは必須要件（MUST-4）。スキップ手段は設けない |
+
+あわせて、補完作業中に見つかった本体の問題を修正した:
+
+- Bash ガードがコマンド文字列中の `scripts/approve` の言及（コミットメッセージ・grep 引数など）まで拒否していた → 実行位置の呼び出しだけを拒否
+- `.claude/settings.local.json` と リポジトリ外の `~/.claude/settings*.json` が保護されておらず、env で `SDLC_MAINTENANCE` を設定して保護を外せた → 編集を拒否
+- `state/gates/` の参照（`cat` 等）まで拒否していた → 変更系のコマンドだけを拒否
+
+---
+
+# 配置: ~/.claude を基本とし、プロジェクトの .claude で上書きする
+
+本体を `~/.claude/`（全プロジェクト共通）に置くことを基本とし、プロジェクトの `.claude/` で上書きでき、
+プロジェクトの `.claude/` だけでも使えるようにした（使い方は `USAGE.md`）。
+
+| 課題（変更前） | 対応 |
+|---|---|
+| hooks が `scripts/sdlc_lib` を相対パスで読み、`~/.claude` に置くと動かない | 本体を `.claude/sdlc/{bin,lib}` に集約し、hooks は自分の位置（またはプロジェクトの `.claude/sdlc/lib`）から読む |
+| スキル・エージェントが `scripts/sdlc`・`.claude/sdlc/...` をプロジェクト内の固定パスで参照 | プロジェクトにはランチャ `scripts/sdlc`・`scripts/approve` だけを置き（`scripts/sdlc init` が生成）、本体のファイルは `<SDLC>/…` と書いて `scripts/sdlc path` でファイル単位に解決 |
+| `~/.claude` の hooks が全プロジェクトで工程の検査をしてしまう | `project.yaml` の `workflow: sdlc` がある SDLC プロジェクトでだけ検査する |
+| `~/.claude` とプロジェクトの両方に hooks があると二重に実行される | プロジェクトに hooks があれば `~/.claude` 側は何もしない |
+| Claude Code は同名スキルを `~/.claude` 側で解決する（プロジェクト版で上書きできない） | `~/.claude` 版の冒頭で `${CLAUDE_SKILL_DIR}` を確認し、プロジェクト版があればそれに従う |
+| 不具合の再発防止観点を本体のチェックリストに追記していた（`~/.claude` だと全プロジェクトに波及） | プロジェクトの `rules/review-<工程ID>.md` に追記する |
+| 全体ルールを `CLAUDE.md` として置いていた（`~/.claude/CLAUDE.md` だと全プロジェクトに波及） | `sdlc/RULES.md` とし、プロジェクトの `CLAUDE.md` から import する |
+| `~/.claude` に置いた本体・設定を Claude が書き換えられる | どのプロジェクトからでも hooks で拒否（インストーラの実行も人に限る） |

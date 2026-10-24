@@ -5,7 +5,12 @@ description: 工程7「システム／受入テスト」。要件定義で作成
 
 # 工程 7: システム／受入テスト（07-system-test）
 
-まず `.claude/sdlc/phase-flow.md`（共通フロー）を読み、その型に従って進める。以下は本工程固有の内容のみ。
+> **配置と上書き**: このスキルのディレクトリは `${CLAUDE_SKILL_DIR}`。これが `~/.claude/skills/` 配下で、
+> プロジェクトに `.claude/skills/phase-system-test/SKILL.md` がある場合は、そちらを Read してその指示に従い、以下は使わない
+> （Claude Code は同名スキルを `~/.claude` 側で解決するため、プロジェクト版はこの方法で優先させる）。
+> `<SDLC>/…` はワークフロー本体のファイル。`scripts/sdlc path <…>` で実際のパスを得てから読む。
+
+まず `<SDLC>/phase-flow.md`（共通フロー）を読み、その型に従って進める。以下は本工程固有の内容のみ。
 
 ## 入力 / 成果物
 - 入力: `docs/02-system-requirements/` の AT 仕様・NFR、全工程の承認済み成果物
@@ -23,8 +28,8 @@ description: 工程7「システム／受入テスト」。要件定義で作成
 
 ## 統合 — 実行・不具合起票・カバレッジ
 1. `commands.test_system`（無ければ `commands.test`）と `commands.coverage` を実行して test-results.md に記録する。
-2. 失敗は工程 6 と同様に `--detected-in 07 --by auto` で自動起票し `/defect` へ。
-3. トレースマトリクスとカバレッジ報告を作成する。`scripts/sdlc trace check --upto 07` が全件 OK であること。
+2. 失敗は工程 6 と同様に（必要なら investigator の mode=triage で切り分けてから） `--detected-in 07 --by auto` で自動起票し `/defect` へ。
+3. トレースマトリクスとカバレッジ報告を作成する。`scripts/sdlc check`（トレース検査を含む）の MUST が全件通ること。
 
 ## ゲートで人に確認してほしい点
 - 受入可否、未自動化 AT の実施結果、NFR の判定、残存する既知の制約。

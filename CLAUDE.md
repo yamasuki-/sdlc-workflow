@@ -1,62 +1,23 @@
-# SDLC ワークフロー 全体ルール
+# sdlc-workflow（ワークフロー本体のソースリポジトリ）
 
-このリポジトリは、要求ドキュメントを入力に V 字モデルの工程（0〜7）で開発を進めるワークフローです。
-**進め方に迷ったら `/sdlc` を実行する**（状態を読んで次の工程を起動する）。
+このリポジトリは SDLC ワークフロー本体の開発用です。利用者向けの使い方は `USAGE.md`、構成は `README.md`。
 
-## 絶対ルール
+## 構成
 
-1. **人間ゲート必須**: 各工程はレビュー後に人の承認を得るまで次工程に進まない。
-   - 承認は人が端末で `scripts/approve <工程>` を実行して `state/gates/` に記録する。
-   - Claude は `scripts/approve` を実行しない・`state/gates/` に書き込まない（hook で拒否される）。
-   - 承認待ちになったら、提示内容とコマンドを人に伝えて**停止する**。
-2. **承認済み成果物は変更しない**: 変更すると成果物ハッシュが変わりゲートが無効になる。
-   承認後に誤りが見つかったら `/defect`（不具合対応フロー）で原因工程からやり直す。
-3. **TDD 必須**: 失敗するテスト（Red）が無い状態で `src_dir` を編集しない（hook で拒否される）。
-   - V 字の左側の工程で右側のテストを先に作る（要件定義→受入テスト仕様、基本設計→結合テスト仕様、詳細設計→単体テストコード）。
-   - テストを書く担当（test-writer）と実装担当（implementer）は別エージェント。実装側はテストを変更しない。
-   - 既存テストの削除・期待値の変更は、必ずレビュー報告に明記する。
-4. **トレーサビリティ必須**: 全成果物に ID を付け、追跡元を書く（下記）。`scripts/sdlc trace check` が通ること。
-5. **言語非依存**: 言語・テストフレームワーク・コマンドは `project.yaml` だけに書く。ワークフロー本体に持ち込まない。
-6. **並行度は最大 2**（Claude Pro 前提）。並行させるタスクは担当ファイルが重ならないこと。
-7. **状態はファイルに残す**: 進捗は `scripts/sdlc` で `state/` に記録する。中断しても `/sdlc` で再開できるようにする。
+- 本体はすべて `.claude/` 配下にあり、`install.py` がこの形のまま `~/.claude/`（全プロジェクト共通）または
+  `<プロジェクト>/.claude/`（プロジェクト単体・上書き）に配置する。
+  - `.claude/sdlc/` … 本体（`bin/`・`lib/`・`templates/`・`checklists/`・`phase-flow.md`・`RULES.md`）
+  - `.claude/hooks/sdlc/` … ガード（hooks）
+  - `.claude/skills/<SDLC のスキル>/`・`.claude/agents/<SDLC のエージェント>.md`
+- 置く対象の一覧は `.claude/sdlc/lib/sdlc_lib/config.py` の `SKILL_NAMES`・`AGENT_NAMES`・`BODY_DIRS`・`BODY_FILES`。
+  スキル・エージェントを追加・改名したらここも更新する。
+- プロジェクトで使うときの全体ルールは `.claude/sdlc/RULES.md`（プロジェクトの CLAUDE.md から import される）。
 
-## ID 体系とトレース記法
+## 開発のルール
 
-| 接頭辞 | 工程 | 内容 |
-|---|---|---|
-| SRC | 0 取り込み | 要求ドキュメントの断片（出典・確信度付き） |
-| REQ / Q | 1 要求整理・分析 | 要求 / 質問 |
-| SR / NFR / AT | 2 要件定義 | システム要件 / 非機能要件 / 受入・システムテスト仕様 |
-| BD / IF / IT | 3 基本設計 | モジュール等の設計要素 / インタフェース / 結合テスト仕様 |
-| DD / UT | 4 詳細設計 | モジュール内設計 / 単体テスト仕様 |
-| DEF | 不具合 | 不具合票 |
-
-- 定義: Markdown の見出し `### SR-001: タイトル`（ID は 3 桁以上、工程内で一意）
-- 追跡元: 定義ブロック内に `- 追跡元: REQ-001, REQ-002`
-- コード・テスト: コメントに `trace: DD-003` / `trace: UT-007`（言語のコメント記法で書く）
-- 下流が不要な項目: 定義ブロック内に `- 対象外: 理由`。承認済みで編集できない上流項目は下流の文書に `- 除外: SRC-005（理由）`
-- 手動試験の記録: 見出しの外に `- trace: AT-010`（AT の実施証跡になる）
-
-## ディレクトリ
-
-| パス | 内容 | 書き込み |
-|---|---|---|
-| `input/` | 要求ドキュメント原本（xlsx/docx/pptx/md） | 工程 0 承認前のみ |
-| `docs/<工程>/` | 各工程の成果物（`plan.md`・`review.md` を含む） | その工程の作業中のみ |
-| `project.yaml` の `src_dir` / `test_dirs.*` | コード・テスト | 対応する工程の作業中のみ |
-| `test_dirs.regression` | 不具合の再現テスト（回帰テスト） | 常に可 |
-| `state/` | phase.json・tasks.yaml・defects（`gates/` 以外） | `scripts/sdlc` 経由で更新 |
-| `.claude/sdlc/` | 共通フロー・テンプレート・レビューチェックリスト | チェックリストへの観点追加のみ |
-
-## よく使うコマンド
-
-```
-scripts/sdlc status                 # 現在工程・ゲート・タスク・次のアクション
-scripts/sdlc tasks next             # 並行実行できるタスク（最大 2）
-scripts/sdlc task start|done|fail <ID> [--result "..."]
-scripts/sdlc trace check            # トレーサビリティ検査
-scripts/sdlc trace impact <ID...>   # 影響範囲（下流）
-scripts/sdlc gate status            # ゲートの有効性（承認＋ハッシュ一致）
-```
-
-工程内の進め方は `.claude/sdlc/phase-flow.md`（全工程共通の型）に従う。
+- このリポジトリ自体もプロジェクト配置として hooks が有効なので、本体（`.claude/sdlc`・`.claude/hooks/sdlc` 等）の
+  編集は `SDLC_MAINTENANCE=1` で起動したセッションで行う。
+- 変更したら自己テストを通す: `python3 -m unittest discover -s tests`
+- `.claude/settings.json` はインストーラのプロジェクト配置と同じ内容に保つ（自己テストで検査している）。
+- 言語・テストフレームワーク固有の内容を本体に入れない（プロジェクトの `project.yaml`・`rules/` に置く）。
+- 利用者に影響する変更は `USAGE.md` と `README.md` に反映する。

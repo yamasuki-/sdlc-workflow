@@ -5,7 +5,12 @@ description: 工程0「取り込み」。input/ の要求ドキュメント（Ex
 
 # 工程 0: 取り込み（00-intake）
 
-まず `.claude/sdlc/phase-flow.md`（共通フロー）を読み、その型に従って進める。以下は本工程固有の内容のみ。
+> **配置と上書き**: このスキルのディレクトリは `${CLAUDE_SKILL_DIR}`。これが `~/.claude/skills/` 配下で、
+> プロジェクトに `.claude/skills/phase-intake/SKILL.md` がある場合は、そちらを Read してその指示に従い、以下は使わない
+> （Claude Code は同名スキルを `~/.claude` 側で解決するため、プロジェクト版はこの方法で優先させる）。
+> `<SDLC>/…` はワークフロー本体のファイル。`scripts/sdlc path <…>` で実際のパスを得てから読む。
+
+まず `<SDLC>/phase-flow.md`（共通フロー）を読み、その型に従って進める。以下は本工程固有の内容のみ。
 
 ## 入力 / 成果物
 - 入力: `input/` の要求ドキュメント（.xlsx / .xlsm / .docx / .pptx / .md）。原本も工程 0 のゲートのハッシュ対象。
@@ -25,8 +30,8 @@ description: 工程0「取り込み」。input/ の要求ドキュメント（Ex
 ## 計画（plan）
 1. `input/` のファイル一覧を確認する（未対応形式は人に変換を依頼）。
 2. **変換は計画ステップで機械的に実行する**（エージェント不要）:
-   `python3 scripts/intake/convert.py input/<ファイル> [input/...]`
-   形式の追加は `scripts/intake/adapters/` にモジュールを足して登録するだけでよい。
+   `scripts/sdlc intake input/<ファイル> [input/...]`
+   形式の追加は本体の `lib/intake/adapters/` にモジュールを足して登録するだけでよい（本体の変更なので人が行う）。
 3. 変換結果の件数・確信度 低の件数・「要画像読取」の件数を plan.md に記録する。
 
 ## タスク分解（decompose） — agent: analyst

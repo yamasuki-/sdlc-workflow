@@ -5,7 +5,12 @@ description: 工程6「結合テスト」。基本設計で作成した結合テ
 
 # 工程 6: 結合テスト（06-integration-test）
 
-まず `.claude/sdlc/phase-flow.md`（共通フロー）を読み、その型に従って進める。以下は本工程固有の内容のみ。
+> **配置と上書き**: このスキルのディレクトリは `${CLAUDE_SKILL_DIR}`。これが `~/.claude/skills/` 配下で、
+> プロジェクトに `.claude/skills/phase-integration-test/SKILL.md` がある場合は、そちらを Read してその指示に従い、以下は使わない
+> （Claude Code は同名スキルを `~/.claude` 側で解決するため、プロジェクト版はこの方法で優先させる）。
+> `<SDLC>/…` はワークフロー本体のファイル。`scripts/sdlc path <…>` で実際のパスを得てから読む。
+
+まず `<SDLC>/phase-flow.md`（共通フロー）を読み、その型に従って進める。以下は本工程固有の内容のみ。
 
 ## 入力 / 成果物
 - 入力: `docs/03-basic-design/` の IT 仕様、承認済みの実装コード
@@ -23,9 +28,10 @@ description: 工程6「結合テスト」。基本設計で作成した結合テ
 
 ## 統合 — テスト実行と不具合の自動起票
 1. `commands.test_integration`（無ければ `commands.test`）を実行し、test-results.md に記録する。
-2. 失敗したテストごとに不具合を**自動起票**する:
+2. 失敗が複数あれば、起票前に investigator（mode=triage）で製品/テストコード/環境/不安定に切り分ける。
+   製品起因・テストコード起因の失敗ごとに不具合を**自動起票**する:
    `scripts/sdlc defect new --title "<IT-xxx 失敗: 要約>" --detected-in 06 --by auto --test <失敗したテストのパス> --severity <重大度>`
    票の「現象」に失敗メッセージ、「再現手順」に実行コマンドを書く。
 3. 不具合があれば `/defect` を起動する（影響範囲外の結合テスト作成は継続してよい）。
    全不具合がクローズし、全結合テストが成功してからレビューへ進む。
-4. `scripts/sdlc trace check`（IT→テストコード）。
+4. `scripts/sdlc check`（組み込みのトレース検査で IT→テストコードを確認、checks の MUST/SHOULD/MAY）。

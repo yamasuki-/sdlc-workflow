@@ -5,13 +5,20 @@ description: 工程2「要件定義」。要求（REQ）からシステム要件
 
 # 工程 2: 要件定義（02-system-requirements）
 
-まず `.claude/sdlc/phase-flow.md`（共通フロー）を読み、その型に従って進める。以下は本工程固有の内容のみ。
+> **配置と上書き**: このスキルのディレクトリは `${CLAUDE_SKILL_DIR}`。これが `~/.claude/skills/` 配下で、
+> プロジェクトに `.claude/skills/phase-system-requirements/SKILL.md` がある場合は、そちらを Read してその指示に従い、以下は使わない
+> （Claude Code は同名スキルを `~/.claude` 側で解決するため、プロジェクト版はこの方法で優先させる）。
+> `<SDLC>/…` はワークフロー本体のファイル。`scripts/sdlc path <…>` で実際のパスを得てから読む。
+
+まず `<SDLC>/phase-flow.md`（共通フロー）を読み、その型に従って進める。以下は本工程固有の内容のみ。
 
 ## 入力 / 成果物
 - 入力: `docs/01-requirements/`（REQ・質問への回答・ゲート 1 のコメント）
 - 成果物（`docs/02-system-requirements/`）:
   - `sr-<領域>.md` … `### SR-xxx`（テンプレート `system-requirements.md`）
-  - `nfr.md` … `### NFR-xxx`（測定可能な基準値）
+  - `nfr.md` … `### NFR-xxx`（測定可能な基準値。テンプレート `nfr.md` のカテゴリ
+    （性能・可用性・セキュリティ・運用保守・拡張性・ユーザビリティ・国際化・アクセシビリティ）を一通り検討し、
+    対象外のカテゴリは理由を書く。セキュリティは認証方式・認可モデル・暗号・監査ログ・データ保護を具体的に）
   - `at-<領域>.md` … `### AT-xxx` 受入／システムテスト仕様（テンプレート `acceptance-test-spec.md`）
   - `plan.md` / `summary.md` / `review.md`
 

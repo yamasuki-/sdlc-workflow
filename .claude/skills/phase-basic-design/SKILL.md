@@ -5,7 +5,12 @@ description: 工程3「基本設計」。システム要件からアーキテク
 
 # 工程 3: 基本設計（03-basic-design）
 
-まず `.claude/sdlc/phase-flow.md`（共通フロー）を読み、その型に従って進める。以下は本工程固有の内容のみ。
+> **配置と上書き**: このスキルのディレクトリは `${CLAUDE_SKILL_DIR}`。これが `~/.claude/skills/` 配下で、
+> プロジェクトに `.claude/skills/phase-basic-design/SKILL.md` がある場合は、そちらを Read してその指示に従い、以下は使わない
+> （Claude Code は同名スキルを `~/.claude` 側で解決するため、プロジェクト版はこの方法で優先させる）。
+> `<SDLC>/…` はワークフロー本体のファイル。`scripts/sdlc path <…>` で実際のパスを得てから読む。
+
+まず `<SDLC>/phase-flow.md`（共通フロー）を読み、その型に従って進める。以下は本工程固有の内容のみ。
 
 ## 入力 / 成果物
 - 入力: `docs/02-system-requirements/`（SR・NFR・AT）、`project.yaml`（言語・FW）
@@ -26,6 +31,8 @@ description: 工程3「基本設計」。システム要件からアーキテク
 - モジュールは後工程で**並行実装できる粒度**に分ける（担当ファイルが重ならない配置にする）。
 - IF にはシグネチャ・データ形式・エラーを型レベルで書く。
 - IT は IF の正常系とエラー伝播を検証する。
+- NFR のセキュリティ要件に対する設計上の手当て（認証・認可の方式と適用箇所、秘密情報の扱い、信頼境界）を architecture.md に書く。
+  実装工程の security-reviewer はこれを基準にする。
 
 ## 統合
 - `scripts/sdlc trace check`（SR→BD/IF、IF→IT）。依存関係が循環していないことを確認する。

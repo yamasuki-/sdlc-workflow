@@ -3,4 +3,5 @@
 __pycache__/
 *.pyc
 .DS_Store
-# プロジェクト固有のビルド成果物・キャッシュは /sdlc-init で追記する
+# 個人用の Claude Code 設定（env で SDLC_MAINTENANCE を設定する場合など）。コミットしない
+.claude/settings.local.json

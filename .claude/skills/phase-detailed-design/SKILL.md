@@ -5,12 +5,19 @@ description: 工程4「詳細設計」。モジュール内設計（DD）と単�
 
 # 工程 4: 詳細設計（04-detailed-design）
 
-まず `.claude/sdlc/phase-flow.md`（共通フロー）を読み、その型に従って進める。以下は本工程固有の内容のみ。
+> **配置と上書き**: このスキルのディレクトリは `${CLAUDE_SKILL_DIR}`。これが `~/.claude/skills/` 配下で、
+> プロジェクトに `.claude/skills/phase-detailed-design/SKILL.md` がある場合は、そちらを Read してその指示に従い、以下は使わない
+> （Claude Code は同名スキルを `~/.claude` 側で解決するため、プロジェクト版はこの方法で優先させる）。
+> `<SDLC>/…` はワークフロー本体のファイル。`scripts/sdlc path <…>` で実際のパスを得てから読む。
+
+まず `<SDLC>/phase-flow.md`（共通フロー）を読み、その型に従って進める。以下は本工程固有の内容のみ。
 
 ## 入力 / 成果物
 - 入力: `docs/03-basic-design/`（BD・IF）
 - 成果物:
-  - `docs/04-detailed-design/dd-<モジュール>.md` … `### DD-xxx` と `### UT-xxx`（テンプレート `detailed-design.md`）
+  - `docs/04-detailed-design/dd-<モジュール>.md` … `### DD-xxx` と `### UT-xxx`（テンプレート `detailed-design.md`。
+    概要・トレーサビリティ・サブ機能・IF・シーケンス・状態遷移の構成。該当しない章は「該当なし」と理由を書く）
+  - 画面・DB を持つモジュールは `ui-<モジュール>.md` / `db-<モジュール>.md`（テンプレート `ui-design.md` / `db-design.md`）
   - `<test_dirs.unit>/` … 単体テストコード（各テストに `trace: UT-xxx`）。**Red の状態で作成する**
   - `plan.md` / `summary.md` / `review.md`
 - 本工程が承認されると単体テストは凍結される（実装工程では変更できない）。
@@ -26,6 +33,8 @@ description: 工程4「詳細設計」。モジュール内設計（DD）と単�
 - `src_dir` は変更しない（コンパイル言語でテストが未定義シンボルでビルドできない場合も、それを Red として扱う）。
 
 ## 統合
-- `commands.test`（または `test_unit`）を実行し、**新規の単体テストが失敗（Red）していること**、
-  失敗理由が未実装・未定義であることを summary.md に記録する（成功してしまうテストは意味が無いので見直す）。
+- **Red の確認**: `scripts/sdlc test-run --expect red`（`commands.test_unit` があれば `--cmd test_unit`）を実行する。
+  証跡が `docs/04-detailed-design/test-run-red.md` に残る。終了コード 5（Red にならない）なら test-writer に差し戻す。
+  出力を見て、新規の単体テストが**1 件ずつ**想定どおりの理由（未実装・未定義）で失敗しているかを確認し、
+  成功してしまうテスト（意味が無い）があれば見直す。結果を summary.md に記録する。
 - `scripts/sdlc trace check`（BD→DD、DD→UT、UT→テストコード）。
