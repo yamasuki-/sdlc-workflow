@@ -76,7 +76,7 @@ class Repo:
         state.save(self.dir, dict(state.DEFAULT_STATE))
 
     def run(self, *cmd, **kw):
-        return subprocess.run(cmd, cwd=self.dir, capture_output=True, text=True, **kw)
+        return subprocess.run(cmd, cwd=self.dir, capture_output=True, text=True, encoding="utf-8", errors="replace", **kw)
 
     def write(self, rel, text):
         p = self.dir / rel
@@ -99,7 +99,7 @@ class Repo:
         e.pop("SDLC_MAINTENANCE", None)
         e.update(env or {})
         return subprocess.run([sys.executable, str(HOOKS / script)], input=json.dumps(data), capture_output=True,
-                              text=True, cwd=self.dir, env=e)
+                              text=True, encoding="utf-8", errors="replace", cwd=self.dir, env=e)
 
     def can_write(self, rel, **kw):
         r = self.hook("guard_write.py", {"file_path": str(self.dir / rel), "content": "x"}, **kw)
@@ -398,14 +398,14 @@ class TestTrace(Base):
 
 class TestDefectFlow(Base):
     def sdlc(self, *args):
-        r = subprocess.run([sys.executable, str(BIN / "sdlc"), *args], cwd=self.r.dir, capture_output=True, text=True,
+        r = subprocess.run([sys.executable, str(BIN / "sdlc"), *args], cwd=self.r.dir, capture_output=True, text=True, encoding="utf-8", errors="replace",
                            env=dict(os.environ, CLAUDE_PROJECT_DIR=str(self.r.dir)))
         return r
 
     def test_full_defect_cycle(self):
         self.approve_upto(4)
         self.r.write("src/calc.py", "def add(a, b):\n    # trace: DD-001\n    return a - b\n")
-        self.r.write("tests/unit/test_calc.py", (self.r.dir / "tests/unit/test_calc.py").read_text())
+        self.r.write("tests/unit/test_calc.py", (self.r.dir / "tests/unit/test_calc.py").read_text(encoding="utf-8"))
         st = state.load(self.r.dir)
         st["current_phase"] = "06-integration-test"
         state.save(self.r.dir, st)
@@ -460,7 +460,7 @@ class TestDefectFlow(Base):
 class TestTestRun(Base):
     def sdlc(self, *args):
         return subprocess.run([sys.executable, str(BIN / "sdlc"), *args], cwd=self.r.dir, capture_output=True,
-                              text=True, env=dict(os.environ, CLAUDE_PROJECT_DIR=str(self.r.dir)))
+                              text=True, encoding="utf-8", errors="replace", env=dict(os.environ, CLAUDE_PROJECT_DIR=str(self.r.dir)))
 
     def test_red_then_green(self):
         self.approve_upto(3)
@@ -480,7 +480,7 @@ class TestTestRun(Base):
 class TestChangeFlow(Base):
     def sdlc(self, *args):
         return subprocess.run([sys.executable, str(BIN / "sdlc"), *args], cwd=self.r.dir, capture_output=True,
-                              text=True, env=dict(os.environ, CLAUDE_PROJECT_DIR=str(self.r.dir)))
+                              text=True, encoding="utf-8", errors="replace", env=dict(os.environ, CLAUDE_PROJECT_DIR=str(self.r.dir)))
 
     def test_change_request_cycle(self):
         self.approve_upto(2)
@@ -602,7 +602,7 @@ def home_env(home) -> dict:
 
 def install(*args, home=None):
     env = dict(os.environ, **home_env(home or TEST_HOME))
-    return subprocess.run([sys.executable, str(INSTALLER), *args], capture_output=True, text=True, env=env)
+    return subprocess.run([sys.executable, str(INSTALLER), *args], capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
 
 
 def run_hook(hook_path, project, tool_input, env=None):
@@ -610,7 +610,7 @@ def run_hook(hook_path, project, tool_input, env=None):
     e = dict(os.environ, CLAUDE_PROJECT_DIR=str(project))
     e.pop("SDLC_MAINTENANCE", None)
     e.update(env or {})
-    return subprocess.run([sys.executable, str(hook_path)], input=json.dumps(data), capture_output=True, text=True,
+    return subprocess.run([sys.executable, str(hook_path)], input=json.dumps(data), capture_output=True, text=True, encoding="utf-8", errors="replace",
                           cwd=project, env=e)
 
 
@@ -630,23 +630,23 @@ class TestPlacement(unittest.TestCase):
 
     def sdlc(self, *args, cwd=None):
         return subprocess.run([BASH, str(self.proj / "scripts" / "sdlc"), *args], cwd=cwd or self.proj,
-                              capture_output=True, text=True, env=dict(os.environ, **self.env))
+                              capture_output=True, text=True, encoding="utf-8", errors="replace", env=dict(os.environ, **self.env))
 
     def user_init(self):
         r = subprocess.run([sys.executable, str(self.user / "sdlc/bin/sdlc"), "init"], cwd=self.proj,
-                           capture_output=True, text=True, env=dict(os.environ, **self.env))
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", env=dict(os.environ, **self.env))
         self.assertEqual(r.returncode, 0, r.stderr)
 
     def test_user_install_idempotent_and_uninstall(self):
         self.user.mkdir(parents=True)
-        (self.user / "settings.json").write_text(json.dumps({"model": "x", "hooks": {"Stop": [{"hooks": []}]}}))
+        (self.user / "settings.json").write_text(json.dumps({"model": "x", "hooks": {"Stop": [{"hooks": []}]}}), encoding="utf-8")
         for _ in range(2):
             r = install("--user", home=self.home)
             self.assertEqual(r.returncode, 0, r.stderr)
         for rel in ["sdlc/bin/sdlc", "sdlc/lib/sdlc_lib/gates.py", "sdlc/RULES.md", "hooks/sdlc/guard_write.py",
                     "skills/sdlc/SKILL.md", "skills/phase-intake/SKILL.md", "agents/reviewer.md"]:
             self.assertTrue((self.user / rel).exists(), rel)
-        s = json.loads((self.user / "settings.json").read_text())
+        s = json.loads((self.user / "settings.json").read_text(encoding="utf-8"))
         self.assertEqual(s["model"], "x")
         self.assertIn("Stop", s["hooks"])
         cmds = [h["command"] for e in s["hooks"]["PreToolUse"] for h in e["hooks"]]
@@ -660,7 +660,7 @@ class TestPlacement(unittest.TestCase):
         r = install("--user", "--uninstall", home=self.home)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertFalse((self.user / "sdlc").exists())
-        s = json.loads((self.user / "settings.json").read_text())
+        s = json.loads((self.user / "settings.json").read_text(encoding="utf-8"))
         self.assertEqual(s, {"model": "x", "hooks": {"Stop": [{"hooks": []}]}})
 
     def test_user_install_inactive_outside_sdlc_projects(self):
@@ -686,9 +686,9 @@ class TestPlacement(unittest.TestCase):
         self.user_init()
         for rel in ["scripts/sdlc", "scripts/approve", "state/phase.json", "docs/00-intake/.gitkeep"]:
             self.assertTrue((self.proj / rel).exists(), rel)
-        self.assertIn("@~/.claude/sdlc/RULES.md", (self.proj / "CLAUDE.md").read_text())
-        self.assertIn("workflow: sdlc", (self.proj / "project.yaml").read_text())
-        self.assertIn(".sdlc/", (self.proj / ".gitignore").read_text())
+        self.assertIn("@~/.claude/sdlc/RULES.md", (self.proj / "CLAUDE.md").read_text(encoding="utf-8"))
+        self.assertIn("workflow: sdlc", (self.proj / "project.yaml").read_text(encoding="utf-8"))
+        self.assertIn(".sdlc/", (self.proj / ".gitignore").read_text(encoding="utf-8"))
         r = self.sdlc("where")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("配置: user", r.stdout)
@@ -703,13 +703,13 @@ class TestPlacement(unittest.TestCase):
         install("--user", home=self.home)
         r = install("--project", str(self.proj), home=self.home)
         self.assertEqual(r.returncode, 0, r.stderr)
-        s = json.loads((self.proj / ".claude/settings.json").read_text())
+        s = json.loads((self.proj / ".claude/settings.json").read_text(encoding="utf-8"))
         cmds = [h["command"] for e in s["hooks"]["PreToolUse"] for h in e["hooks"]]
         self.assertTrue(all("${CLAUDE_PROJECT_DIR}/.claude/hooks/sdlc/run" in c for c in cmds))
         self.assertEqual(s["env"]["CLAUDE_CODE_USE_POWERSHELL_TOOL"], "0")
         self.user_init()
-        self.assertIn("@.claude/sdlc/RULES.md", (self.proj / "CLAUDE.md").read_text())
-        self.assertNotIn("@~/.claude/sdlc/RULES.md", (self.proj / "CLAUDE.md").read_text())
+        self.assertIn("@.claude/sdlc/RULES.md", (self.proj / "CLAUDE.md").read_text(encoding="utf-8"))
+        self.assertNotIn("@~/.claude/sdlc/RULES.md", (self.proj / "CLAUDE.md").read_text(encoding="utf-8"))
         target = {"file_path": str(self.proj / "docs/01-requirements/a.md")}
         # ~/.claude 側の hook はプロジェクト版に任せて何もしない
         self.assertEqual(run_hook(self.user / "hooks/sdlc/guard_write.py", self.proj, target, self.env).returncode, 0)
@@ -725,7 +725,7 @@ class TestPlacement(unittest.TestCase):
         self.user_init()
         override = self.proj / ".claude/sdlc/checklists/05-implementation.md"
         override.parent.mkdir(parents=True)
-        override.write_text("# プロジェクト版\n")
+        override.write_text("# プロジェクト版\n", encoding="utf-8")
         self.assertEqual(Path(self.sdlc("path", "checklists/05-implementation.md").stdout.strip()).resolve(),
                          override.resolve())
         self.assertEqual(Path(self.sdlc("path", "checklists/04-detailed-design.md").stdout.strip()).resolve(),
@@ -737,7 +737,7 @@ class TestPlacement(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertFalse((self.user / "sdlc").exists())
         r = subprocess.run([sys.executable, str(self.proj / ".claude/sdlc/bin/sdlc"), "init"], cwd=self.proj,
-                           capture_output=True, text=True, env=dict(os.environ, **self.env))
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", env=dict(os.environ, **self.env))
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("配置: project", self.sdlc("where").stdout)
         # プロジェクト配置では project.yaml の記入前から本体・工程成果物が保護される
@@ -760,22 +760,22 @@ class TestPlacement(unittest.TestCase):
         self.user_init()
         override = self.proj / ".claude/sdlc/templates/review.md"
         override.parent.mkdir(parents=True)
-        override.write_text("# 社内様式\n")
+        override.write_text("# 社内様式\n", encoding="utf-8")
         r = install("--project", str(self.proj), home=self.home)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(override.read_text(), "# 社内様式\n")       # インストーラが置いていないファイルは残す
+        self.assertEqual(override.read_text(encoding="utf-8"), "# 社内様式\n")       # インストーラが置いていないファイルは残す
         self.assertIn("templates/review.md", r.stdout)
         edited = self.proj / ".claude/sdlc/checklists/05-implementation.md"
-        edited.write_text("# 編集\n")
+        edited.write_text("# 編集\n", encoding="utf-8")
         untouched = self.proj / ".claude/sdlc/phase-flow.md"
-        untouched.write_text(untouched.read_text() + "x")            # 変更扱い
+        untouched.write_text(untouched.read_text(encoding="utf-8") + "x")            # 変更扱い
         untouched2 = self.proj / ".claude/sdlc/RULES.md"
-        original = untouched2.read_text()
+        original = untouched2.read_text(encoding="utf-8")
         r = install("--project", str(self.proj), home=self.home)
-        self.assertEqual(edited.read_text(), "# 編集\n")
-        self.assertEqual(untouched2.read_text(), original)
+        self.assertEqual(edited.read_text(encoding="utf-8"), "# 編集\n")
+        self.assertEqual(untouched2.read_text(encoding="utf-8"), original)
         r = install("--project", str(self.proj), "--force", home=self.home)
-        self.assertNotEqual(edited.read_text(), "# 編集\n")
+        self.assertNotEqual(edited.read_text(encoding="utf-8"), "# 編集\n")
         r = install("--project", str(self.proj), "--uninstall", home=self.home)
         self.assertFalse((self.proj / ".claude/sdlc/bin").exists())
         self.assertFalse((self.proj / ".claude/hooks/sdlc").exists())
@@ -824,7 +824,7 @@ class TestWindowsSupport(Base):
             e = dict(os.environ, CLAUDE_PROJECT_DIR=str(self.r.dir))
             e.pop("SDLC_MAINTENANCE", None)
             r = subprocess.run([sys.executable, str(HOOKS / "guard_bash.py")], input=json.dumps(data),
-                               capture_output=True, text=True, cwd=self.r.dir, env=e)
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=self.r.dir, env=e)
         return r.returncode == 0
 
     def test_powershell_commands(self):
@@ -847,7 +847,7 @@ class TestWindowsSupport(Base):
         self.assertTrue(self.shell("Bash", "git log --oneline -3"))
 
     def test_approve_refuses_inside_claude_code(self):
-        r = subprocess.run([sys.executable, str(BIN / "approve"), "0"], capture_output=True, text=True,
+        r = subprocess.run([sys.executable, str(BIN / "approve"), "0"], capture_output=True, text=True, encoding="utf-8", errors="replace",
                            cwd=self.r.dir, env=dict(os.environ, CLAUDECODE="1"))
         self.assertEqual(r.returncode, 1)
         self.assertIn("Claude Code", r.stderr)
@@ -857,15 +857,15 @@ class TestWindowsSupport(Base):
         data = json.dumps({"tool_input": {"file_path": str(self.r.dir / "docs/01-requirements/a.md")},
                            "cwd": str(self.r.dir)})
         env = dict(os.environ, CLAUDE_PROJECT_DIR=str(self.r.dir))
-        r = subprocess.run([BASH, str(run_sh), "guard_write.py"], input=data, capture_output=True, text=True, env=env)
+        r = subprocess.run([BASH, str(run_sh), "guard_write.py"], input=data, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
         self.assertEqual(r.returncode, 2, r.stderr)          # Python 経由でガードが働く
-        r = subprocess.run([BASH, str(run_sh), "guard_write.py"], input=data, capture_output=True, text=True,
+        r = subprocess.run([BASH, str(run_sh), "guard_write.py"], input=data, capture_output=True, text=True, encoding="utf-8", errors="replace",
                            env=dict(env, SDLC_PYTHON="/nonexistent/python"))
         self.assertEqual(r.returncode, 2)                     # Python が無い SDLC プロジェクトは拒否
         self.assertIn("Python", r.stderr)
         other = Path(tempfile.mkdtemp(prefix="sdlc-other-"))
         try:
-            r = subprocess.run([BASH, str(run_sh), "guard_write.py"], input=data, capture_output=True, text=True,
+            r = subprocess.run([BASH, str(run_sh), "guard_write.py"], input=data, capture_output=True, text=True, encoding="utf-8", errors="replace",
                                env=dict(env, SDLC_PYTHON="/nonexistent/python", CLAUDE_PROJECT_DIR=str(other)))
             self.assertEqual(r.returncode, 0)                 # 無関係なプロジェクトは止めない
         finally:

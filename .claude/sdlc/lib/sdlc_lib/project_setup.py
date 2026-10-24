@@ -24,7 +24,7 @@ for base in "$root/.claude" "$HOME/.claude" "${USERPROFILE:+$USERPROFILE/.claude
     exec bash "$base/sdlc/bin/py" "$base/sdlc/bin/$name" "$@"
   fi
 done
-echo "SDLC ワークフロー本体（.claude/sdlc/bin/$name）が見つかりません。USAGE.md のインストール手順を参照してください。" >&2
+echo "SDLC ワークフロー本体（.claude/sdlc/bin/${name}）が見つかりません。USAGE.md のインストール手順を参照してください。" >&2
 exit 1
 '''
 
