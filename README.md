@@ -155,6 +155,5 @@ install.py                    インストーラ（--user / --project <dir> / --
 tests/                        ワークフロー自己テスト
 .github/workflows/tests.yml   自己テストを Linux / Windows / macOS で実行する CI
 examples/                     動作確認用のサンプル要求ドキュメント
-spec/                         仕様の原典と採否レポート
 USAGE.md                      インストールと使い方
 ```
