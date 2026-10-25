@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""要求ドキュメント（xlsx / docx / pptx / md）を共通中間形式（Markdown＋出典メタデータ）に変換する。
+"""要求ドキュメント（xlsx / docx / pptx / pdf / md）を共通中間形式（Markdown＋出典メタデータ）に変換する。
 
   scripts/sdlc intake input/要求仕様.xlsx [input/...] [--out docs/00-intake]
 

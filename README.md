@@ -1,7 +1,7 @@
 # sdlc-workflow
 
 Claude Code 上で動く、V 字モデルのソフトウェア開発ワークフローです。
-要求ドキュメント（Excel / Word / PowerPoint / Markdown）を入力に、
+要求ドキュメント（Excel / Word / PowerPoint / PDF / Markdown）を入力に、
 **工程単位・タスク単位の並行処理・人間ゲート・TDD** で開発を進めます。
 
 本体は `~/.claude/`（全プロジェクト共通）に置いて使うのが基本で、プロジェクトの `.claude/` に置けば

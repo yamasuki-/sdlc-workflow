@@ -15,7 +15,7 @@ description: プロジェクト固有情報 project.yaml（言語・テストフ
 ## 手順
 
 1. 本体が使う Python と依存関係を確認する:
-   `bash "${CLAUDE_SKILL_DIR}/../../sdlc/bin/py" -c "import yaml, openpyxl, docx, pptx"`
+   `bash "${CLAUDE_SKILL_DIR}/../../sdlc/bin/py" -c "import yaml, openpyxl, docx, pptx, pdfplumber"`
    失敗したら、その Python（`bash "${CLAUDE_SKILL_DIR}/../../sdlc/bin/py" --which` で分かる）に
    `-m pip install -r requirements.txt` で入れるよう人に依頼する（hooks も同じ Python で動く）。
 2. **準備**: プロジェクトにランチャ `scripts/sdlc` が無ければ、本体を直接呼んで作る:

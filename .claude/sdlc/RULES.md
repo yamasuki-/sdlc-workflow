@@ -55,7 +55,7 @@
 
 | パス | 内容 | 書き込み |
 |---|---|---|
-| `input/` | 要求ドキュメント原本（xlsx/docx/pptx/md） | 工程 0 承認前のみ |
+| `input/` | 要求ドキュメント原本（xlsx/docx/pptx/pdf/md） | 工程 0 承認前のみ |
 | `docs/<工程>/` | 各工程の成果物（`plan.md`・`review.md` を含む） | その工程の作業中のみ |
 | `project.yaml` の `src_dir` / `test_dirs.*` | コード・テスト | 対応する工程の作業中のみ |
 | `test_dirs.regression` | 不具合の再現テスト（回帰テスト） | 常に可 |

@@ -19,12 +19,15 @@ Linux・macOS・Windows（Git for Windows の Git Bash を使う）で動きま�
 - Python 3.10 以上、git、bash（Windows では Git for Windows）
 - 本体の依存パッケージ:
   ```bash
-  python3 -m pip install -r requirements.txt   # PyYAML, openpyxl, python-docx, python-pptx
+  python3 -m pip install -r requirements.txt   # PyYAML, openpyxl, python-docx, python-pptx, pdfplumber
   ```
   hooks と `scripts/sdlc` は、`python3` → `python` → `py -3` の順に、3.10 以上で PyYAML を読み込める Python を探して使います。
   特定の Python を使わせたいときは環境変数 `SDLC_PYTHON` に指定します（例: `SDLC_PYTHON="py -3.12"`）。
   どの Python が使われるかは `scripts/sdlc where` で確認できます。
-- PowerPoint の図をスライド画像として読み取りたい場合は LibreOffice（`soffice`）と `pdftoppm`（任意）
+- PowerPoint の図をスライド画像として読み取りたい場合は LibreOffice（`soffice`）と `pdftoppm`（任意）。
+  PDF のページの画像化は pdfplumber（同梱の pypdfium2）で行うため追加のツールは不要です。
+- PDF はテキスト層から取り込みます。スキャンした PDF（テキスト層なし）はページ画像から読み取るため、
+  可能なら元の Word / Excel / PowerPoint を置いてください（出典の精度が上がります）。パスワード付きの PDF は取り込めません。
 
 ---
 
@@ -155,7 +158,7 @@ scripts/sdlc path checklists/05-implementation.md   # 実際に使われるフ�
 ## 5. 日々の使い方
 
 ```
-input/ に要求ドキュメント（xlsx / docx / pptx / md）を置く
+input/ に要求ドキュメント（xlsx / docx / pptx / pdf / md）を置く
 > /sdlc                  状態を読んで次の工程を実行する（中断しても続きから再開）
 ```
 

@@ -22,7 +22,7 @@ description: SDLC ワークフローの最上位オーケストレーター。st
 | action | すること |
 |---|---|
 | `init` | `/sdlc-init` スキルを起動する |
-| `need_input` | `input/` に要求ドキュメント（xlsx/docx/pptx/md）を置くよう人に依頼して停止 |
+| `need_input` | `input/` に要求ドキュメント（xlsx/docx/pptx/pdf/md）を置くよう人に依頼して停止 |
 | `run_phase` / `revise` | `next.skill` のスキルを起動する（再開ステップは `next.step`、差戻しなら差戻し対応） |
 | `advance` | `scripts/sdlc phase advance` を実行し、手順 1 に戻る（次工程のスキルを起動する） |
 | `await_approval` | 下記「承認待ちの提示」を行って**停止** |
