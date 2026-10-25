@@ -607,11 +607,63 @@ class TestAdapters(Base):
         self.assertIn("管理者: ○", out)
         self.assertIn("確信度: 中", out)
 
+    def test_pdf(self):
+        page1 = ("BT /F1 18 Tf 72 720 Td (Requirements) Tj ET\n"
+                 "BT /F1 11 Tf 72 690 Td (The user can search.) Tj ET\n"
+                 "BT /F1 11 Tf 72 660 Td (Search results are shown) Tj ET\n"
+                 "BT /F1 11 Tf 72 647 Td (within 3 seconds.) Tj ET\n"
+                 "BT /F1 11 Tf 72 620 Td (- Login) Tj ET\n"
+                 "72 600 m 372 600 l S 72 580 m 372 580 l S 72 560 m 372 560 l S\n"
+                 "72 560 m 72 600 l S 222 560 m 222 600 l S 372 560 m 372 600 l S\n"
+                 "BT /F1 11 Tf 80 586 Td (Item) Tj ET BT /F1 11 Tf 230 586 Td (Value) Tj ET\n"
+                 "BT /F1 11 Tf 80 566 Td (Response) Tj ET BT /F1 11 Tf 230 566 Td (3 sec) Tj ET\n")
+        page2 = ("BT /F1 11 Tf 110 620 Td (Box A) Tj ET\n"
+                 "100 600 100 50 re S 300 600 100 50 re S 200 625 m 300 625 l S 400 625 m 450 625 l S\n")
+        (self.r.dir / "input/req.pdf").write_bytes(make_pdf([page1, page2]))
+        out = self.convert("input/req.pdf")
+        self.assertIn("- 形式: pdf", out)
+        self.assertIn("Requirements / p.1 段落1", out)
+        self.assertIn("> The user can search.", out)
+        self.assertIn("> Search results are shown\n> within 3 seconds.", out)  # 行間が詰まった行は 1 段落
+        self.assertIn("種別: 箇条書き", out)
+        self.assertIn("Requirements / p.1 表1 行2", out)
+        self.assertIn("> Value: 3 sec", out)
+        self.assertNotIn("段落3\n\n- 種別: 段落\n- 確信度: 高\n\n> Item", out)  # 表の文字は段落に混ぜない
+        self.assertIn("p.2 / ページ全体（画像化）", out)
+        self.assertTrue((self.r.dir / "docs/00-intake/assets/req-page2.png").exists())
+        self.assertNotIn("p.1 / ページ全体", out)  # 表の罫線だけでは図とみなさない
+
+    def test_broken_pdf(self):
+        (self.r.dir / "input/bad.pdf").write_bytes(b"not a pdf")
+        with self.assertRaises(SystemExit) as cm:
+            self.convert("input/bad.pdf")
+        self.assertIn("PDF を開けません", str(cm.exception.code))
+
     def test_refuse_after_gate(self):
         self.approve_upto(0)
         with self.assertRaises(SystemExit):
             self.convert("input/req.md")
 
+
+
+def make_pdf(pages: list[str]) -> bytes:
+    """テスト用の最小限の PDF（Helvetica、ページごとの内容ストリーム）を組み立てる。"""
+    n = len(pages)
+    objs = ["<< /Type /Catalog /Pages 2 0 R >>",
+            f"<< /Type /Pages /Kids [{' '.join(f'{4 + 2 * i} 0 R' for i in range(n))}] /Count {n} >>",
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+    for i, c in enumerate(pages):
+        objs.append("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+                    f"/Resources << /Font << /F1 3 0 R >> >> /Contents {5 + 2 * i} 0 R >>")
+        objs.append(f"<< /Length {len(c.encode())} >>\nstream\n{c}\nendstream")
+    out, offsets = b"%PDF-1.4\n", []
+    for k, o in enumerate(objs, 1):
+        offsets.append(len(out))
+        out += f"{k} 0 obj\n{o}\nendobj\n".encode()
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode()
+    out += b"".join(f"{o:010d} 00000 n \n".encode() for o in offsets)
+    return out + f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
 
 
 def home_env(home) -> dict:

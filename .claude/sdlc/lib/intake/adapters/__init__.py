@@ -13,6 +13,7 @@ EXTENSIONS = {
     ".xlsm": "xlsx",
     ".docx": "docx",
     ".pptx": "pptx",
+    ".pdf": "pdf",
     ".md": "md",
     ".markdown": "md",
 }
