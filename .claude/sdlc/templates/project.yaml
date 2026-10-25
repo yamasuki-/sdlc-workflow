@@ -1,0 +1,39 @@
+# プロジェクト固有情報（ワークフロー本体は言語非依存。言語固有の情報はここだけに置く）
+workflow: sdlc            # この印で ~/.claude に置いた本体がこのプロジェクトを SDLC プロジェクトと判定する（消さない）
+language: ""              # 例: python / typescript / java / go
+test_framework: ""        # 例: pytest / vitest / junit5
+commands:
+  test: ""                # 全テスト実行。終了コード 0 = 全件成功（TDD ガードと不具合クローズ判定に使用）
+  test_unit: ""           # 任意: 単体テストのみ
+  test_integration: ""    # 任意: 結合テストのみ
+  test_system: ""         # 任意: システム／受入テストのみ
+  lint: ""                # 任意
+  coverage: ""            # 任意: カバレッジ計測
+coverage_threshold: 0     # カバレッジ下限（%）。0 = 判定しない
+src_dir: ""               # 例: src
+test_dir: ""              # 例: tests
+# 任意: 省略時は <test_dir>/unit, integration, system, regression
+# test_dirs:
+#   unit: tests/unit
+#   integration: tests/integration
+#   system: tests/system
+#   regression: tests/regression
+tdd:
+  hook_timeout_sec: 300   # TDD ガードがテストを実行するときのタイムアウト
+parallel:
+  max_tasks: 2            # 同時実行タスク数（Claude Pro 前提で 2）
+# 機械チェックゲート（scripts/sdlc check）。LLM レビューの前に実行し、MUST が失敗したらレビューに進めない・承認できない。
+# common は全工程、工程 ID のブロックはその工程だけに適用。トレーサビリティ検査は組み込みの MUST として常に実行される。
+# 各要素はコマンド文字列か {name, cmd}。終了コード 127（コマンドが無い）は skipped（未インストール）扱い。
+checks:
+  common:
+    must: []
+    should: []            # 例: "markdownlint-cli2 'docs/**/*.md'"
+    may: []
+  # 05-implementation:
+  #   must: ["<lint コマンド>", "<型検査コマンド>"]
+  #   should: ["<依存脆弱性スキャン>", "<シークレットスキャン>"]
+  #   may: ["<重複コード検出>"]
+check_timeout_sec: 300
+# 設計工程（03・04）の設計書で許すコードブロックの種類（図のみ）。それ以外のコードブロックは組み込みの MUST で失敗する
+# design_allowed_fences: [mermaid, plantuml]

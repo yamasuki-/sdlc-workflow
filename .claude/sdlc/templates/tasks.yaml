@@ -1,0 +1,20 @@
+# タスク DAG（scripts/sdlc tasks validate で検証、scripts/sdlc tasks next で並行実行対象を取得）
+phase: 02-system-requirements
+scope: full            # full | defect:DEF-001
+tasks:
+  - id: T-001
+    title: 認証まわりのシステム要件を作成
+    agent: analyst     # analyst | designer | test-writer | implementer
+    trace_ids: [REQ-001, REQ-002]
+    files: [docs/02-system-requirements/sr-auth.md]
+    depends_on: []
+    worktree: false    # 実装・テスト工程（05〜07）のコード作成タスクのみ true
+    status: pending    # 以下は scripts/sdlc が更新する
+  - id: T-002
+    title: 認証まわりの受入テスト仕様を作成
+    agent: test-writer
+    trace_ids: [REQ-001, REQ-002]
+    files: [docs/02-system-requirements/at-auth.md]
+    depends_on: [T-001]
+    worktree: false
+    status: pending
