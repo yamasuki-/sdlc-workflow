@@ -55,7 +55,7 @@ scripts/approve 00                  # 人が端末で承認（Claude からは�
 
 | 仕組み | 内容 |
 |---|---|
-| 機械チェック | `scripts/sdlc check`。組み込みのトレース検査＋`project.yaml` の `checks`（工程別・MUST/SHOULD/MAY）。MUST 失敗中はレビューに進まず、承認もできない（`scripts/approve` が承認時に再実行する） |
+| 機械チェック | `scripts/sdlc check`。組み込みのトレース検査（設計工程では設計書にコードが無いことの検査も）＋`project.yaml` の `checks`（工程別・MUST/SHOULD/MAY）。MUST 失敗中はレビューに進まず、承認もできない（`scripts/approve` が承認時に再実行する） |
 | レビュー | reviewer（作成者と別コンテキスト・チェックリスト＋`rules/review-*.md`）。実装工程は後段に security-reviewer（OWASP 等。Critical/High で不合格）。判定「不合格」の間は承認できない |
 | Red / Green の証跡 | `scripts/sdlc test-run --expect red|green`。詳細設計後の Red、実装後の Green を `docs/<工程>/test-run-*.md` に残す |
 | 決定事項・未解決事項 | `state/decisions.md` / `state/open-questions.md`。サブエージェントは報告で返し、オーケストレータが一元追記する |

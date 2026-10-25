@@ -5,10 +5,12 @@ project.yaml の checks に、工程ごと（と全工程共通の common）に 
   SHOULD … 警告。レビュアーが判断する
   MAY    … 参考情報
 組み込みの MUST としてトレーサビリティ検査（scripts/sdlc trace check 相当）を常に実行する。
+設計工程（基本設計・詳細設計）では、設計書に図以外のコードブロックが無いことも組み込みの MUST として検査する。
 コマンドが見つからない（終了コード 127）場合は失敗ではなく skipped（未インストール）として扱う。
 """
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -19,6 +21,36 @@ from .state import now
 
 LEVELS = ("must", "should", "may")
 LEVEL_LABEL = {"must": "MUST", "should": "SHOULD", "may": "MAY"}
+
+# 設計書にコードを書かない: 対象工程と、図として許すコードブロックの種類（project.yaml の design_allowed_fences で変更可）
+DESIGN_PHASES = ("03-basic-design", "04-detailed-design")
+DEFAULT_ALLOWED_FENCES = ("mermaid", "plantuml")
+# 設計書ではない工程ファイル（計画・まとめ・レビュー・実行結果の記録）
+NON_DESIGN_FILES = re.compile(r"^(plan|summary|review|checks|test-results|test-run-.*)\.md$")
+FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})\s*([^\s`{]*)")
+
+
+def design_code_blocks(root, proj: dict, phase) -> list[str]:
+    """設計書の中の、図以外のコードブロック（言語指定なしを含む）を「ファイル:行: 種類」で返す。"""
+    d = Path(root) / "docs" / phase_id(phase)
+    allowed = {str(x).lower() for x in (proj.get("design_allowed_fences") or DEFAULT_ALLOWED_FENCES)}
+    found = []
+    for p in sorted(d.rglob("*.md")) if d.is_dir() else []:
+        if NON_DESIGN_FILES.match(p.name):
+            continue
+        opened = None
+        for n, line in enumerate(p.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+            m = FENCE_RE.match(line)
+            if not m:
+                continue
+            if opened is None:
+                opened = m.group(1)
+                lang = m.group(2).lower()
+                if lang not in allowed:
+                    found.append(f"{p.relative_to(root).as_posix()}:{n}: {lang or '（言語指定なし）'}")
+            elif m.group(1)[0] == opened[0] and len(m.group(1)) >= len(opened) and not m.group(2):
+                opened = None
+    return found
 
 
 def _entries(items) -> list[dict]:
@@ -61,6 +93,12 @@ def run(root, proj: dict, phase) -> dict:
     items.append({"level": "must", "name": "trace", "cmd": f"scripts/sdlc trace check --upto {pid}",
                   "status": "fail" if issues else "pass", "rc": 1 if issues else 0,
                   "output": "\n".join(issues[:50]) or "OK"})
+    if pid in DESIGN_PHASES:
+        code = design_code_blocks(root, proj, pid)
+        items.append({"level": "must", "name": "design-no-code", "cmd": f"（組み込み）docs/{pid} のコードブロック検査",
+                      "status": "fail" if code else "pass", "rc": 1 if code else 0,
+                      "output": ("設計書にコードを書かない（処理は文章・表・図で書く）。次のコードブロックを除くこと:\n"
+                                 + "\n".join(code[:50])) if code else "OK"})
     timeout = int(proj.get("check_timeout_sec") or 300)
     for lv, entries in configured(proj, pid).items():
         for e in entries:

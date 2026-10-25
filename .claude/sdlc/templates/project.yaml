@@ -35,3 +35,5 @@ checks:
   #   should: ["<依存脆弱性スキャン>", "<シークレットスキャン>"]
   #   may: ["<重複コード検出>"]
 check_timeout_sec: 300
+# 設計工程（03・04）の設計書で許すコードブロックの種類（図のみ）。それ以外のコードブロックは組み込みの MUST で失敗する
+# design_allowed_fences: [mermaid, plantuml]

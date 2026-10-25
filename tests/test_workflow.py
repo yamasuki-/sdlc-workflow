@@ -323,6 +323,24 @@ class TestChecks(Base):
         res = checks.run(self.r.dir, self.r.proj, 1)
         self.assertFalse(res["must_passed"])
 
+    def test_design_docs_without_code(self):
+        doc = ("### BD-001: x\n\n```mermaid\nflowchart LR\n  A --> B\n```\n\n"
+               "- シグネチャ: `get(id: int) -> Item`\n")
+        self.r.write("docs/03-basic-design/modules.md", doc)
+        self.r.write("docs/03-basic-design/checks.md", "```\nlog\n```\n")  # 工程ファイルは対象外
+        self.assertEqual(checks.design_code_blocks(self.r.dir, self.r.proj, 3), [])
+        self.r.write("docs/03-basic-design/modules.md",
+                     doc + "\n````python\ndef get(id):\n    ```\n````\n\n```\nx = 1\n```\n")
+        found = checks.design_code_blocks(self.r.dir, self.r.proj, 3)
+        self.assertEqual(found, ["docs/03-basic-design/modules.md:10: python",
+                                 "docs/03-basic-design/modules.md:15: （言語指定なし）"])
+        res = checks.run(self.r.dir, self.r.proj, 3)
+        item = [i for i in res["items"] if i["name"] == "design-no-code"][0]
+        self.assertEqual((item["level"], item["status"]), ("must", "fail"))
+        self.assertFalse(res["must_passed"])
+        # 設計工程以外では検査しない
+        self.assertNotIn("design-no-code", [i["name"] for i in checks.run(self.r.dir, self.r.proj, 2)["items"]])
+
 
 class TestRecords(Base):
     def test_decisions_and_questions(self):
