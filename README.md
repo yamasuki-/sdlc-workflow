@@ -10,9 +10,6 @@ Claude Code 上で動く、V 字モデルのソフトウェア開発ワークフ
 対応環境: Linux / macOS / Windows（Git for Windows の Git Bash と Python 3.10 以上。PowerShell・コマンドプロンプトからも
 ランチャ `scripts\sdlc.cmd`・`scripts\approve.cmd` で操作できます。詳細は USAGE.md「9. Windows で使う」）。
 
-仕様の原典: [`spec/sdlc-workflow-proposal.md`](spec/sdlc-workflow-proposal.md) /
-採否判定: [`spec/adoption-report.md`](spec/adoption-report.md)
-
 ## 全体像
 
 ```
@@ -158,6 +155,5 @@ install.py                    インストーラ（--user / --project <dir> / --
 tests/                        ワークフロー自己テスト
 .github/workflows/tests.yml   自己テストを Linux / Windows / macOS で実行する CI
 examples/                     動作確認用のサンプル要求ドキュメント
-spec/                         仕様の原典と採否レポート
 USAGE.md                      インストールと使い方
 ```
